@@ -22,7 +22,9 @@ over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_AP
 > **Status:** built and tested against real hardware (an AS5600 + a
 > generic analog servo on an Arduino Nano clone) — see
 > [Known limitations](#known-limitations) for what's still rough around
-> the edges.
+> the edges. **The firmware currently depends on two of my other
+> libraries that aren't public yet** — see
+> [Dependencies](#requirements--dependencies) before you try to build it.
 
 ## Contents
 
@@ -32,7 +34,7 @@ over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_AP
 - [How it works](#how-it-works)
 - [The generated constructor & Universal-Motor-Interface](#the-generated-constructor--universal-motor-interface)
 - [Wiring](#wiring)
-- [Requirements](#requirements)
+- [Requirements & dependencies](#requirements--dependencies)
 - [Safety notes](#safety-notes)
 - [Serial protocol reference](#serial-protocol-reference)
 - [Known limitations](#known-limitations)
@@ -141,13 +143,19 @@ one it's actually talking to.
 > (verified against the driver's real source, not guessed), ready to drop
 > in the moment it's released.
 
-**You don't need it to get value from this tool today.** The range
-finder, the save/load workflow, and the wizard's actual measurements
-(real min/max pulse, real travel, direction, a physically-verified zero
-offset) are all useful on their own — feed them into whatever servo code
-you're already writing, by hand, with or without this specific library.
-The generated constructor is a convenience for later, not the point of
-the tool.
+**You don't need to adopt it to get value from what this tool measures.**
+The range finder, the save/load workflow, and the wizard's actual
+measurements (real min/max pulse, real travel, direction, a
+physically-verified zero offset) are all useful on their own — feed them
+into whatever servo code you're already writing, by hand, with or without
+this specific library. The generated constructor is a convenience for
+later, not the point of the tool.
+
+That said — this specific repo's *firmware* separately depends on another
+one of my libraries (Universal-Encoder-Interface) to build at all, not
+just to use the generated constructor. See
+[Dependencies](#requirements--dependencies) for exactly what's needed and
+what's still unreleased.
 
 ## Wiring
 
@@ -164,20 +172,35 @@ the tool.
   is not a direct 5V input). Common ground between the supply, the servo,
   and the Arduino either way.
 
-## Requirements
+## Requirements & dependencies
+
+**Hardware:**
 
 - An Arduino-compatible board with I²C and at least one free PWM-capable
   digital pin.
 - An AS5600 breakout, magnet mounted on the servo's output shaft.
-- [RobTillaart's `AS5600` Arduino library](https://github.com/RobTillaart/AS5600)
-  (`arduino-cli lib install "AS5600"`, or via Library Manager).
-- For PCA9685 support specifically: [Adafruit's PWM Servo Driver
-  Library](https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library)
-  and its `Universal-Motor-Interface` wrapper — see the sketch's own
-  header comment if you're not using PCA9685 and want to trim that
-  dependency.
-- Chrome or Edge (desktop) for the app — Web Serial isn't available in
-  Firefox or Safari.
+
+**Software, to build the firmware — in order of how likely you already
+have them:**
+
+| Library | Used for | Status |
+|---|---|---|
+| [RobTillaart's `AS5600`](https://github.com/RobTillaart/AS5600) | Low-level AS5600 I²C register access | Public — `arduino-cli lib install "AS5600"` or via Library Manager |
+| [Adafruit PWM Servo Driver Library](https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library) | PCA9685 support only | Public |
+| **Universal-Encoder-Interface** (mine) | Wraps the AS5600 library behind a generic encoder interface — used **unconditionally**, every build needs it | **Not public yet** |
+| **Universal-Motor-Interface** (mine) | Its `PCA9685Backend` for raw PCA9685 pulse writes — only needed for the PCA9685 config path, not plain RC-servo use | **Not public yet** |
+
+In short: **the firmware as committed here won't compile for anyone
+without access to Universal-Encoder-Interface**, regardless of whether
+you're using a plain RC servo or a PCA9685 — that dependency isn't
+optional. Universal-Motor-Interface is only needed if you're
+configuring a PCA9685 channel; a plain-pin RC servo setup doesn't touch
+it at build time at all (only the *generated constructor* references it,
+as C++ source text you'd paste into your own project later — see
+[above](#the-generated-constructor--universal-motor-interface)).
+
+**Browser:** Chrome or Edge (desktop) for the app — Web Serial isn't
+available in Firefox or Safari.
 
 ## Safety notes
 
