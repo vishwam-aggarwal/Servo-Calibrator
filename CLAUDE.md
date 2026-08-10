@@ -5,235 +5,168 @@ with code in this repository.
 
 ## What this is
 
-Two companion-firmware + Web Serial browser-app pairs for working with a
-hobby RC servo, sharing the same hardware pattern (Arduino Nano, AS5600
-magnetic encoder on the servo's output shaft as ground truth, one
-self-contained HTML file per app talking [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API),
-no build step):
+One companion-firmware + Web Serial browser-app pair for characterizing
+a hobby RC servo — Arduino Nano, AS5600 magnetic encoder on the servo's
+output shaft as ground truth, one self-contained HTML file talking
+[Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API),
+no build step:
 
-1. **Servo Calibrator** (`ServoCalibrator.html` + `ServoCalibrator_Companion/`)
-   — finds a servo's real mechanical pulse range/travel (stall-detected,
-   not guessed) and walks through a guided installation/calibration
-   wizard (logical angle range → horn install → direction test → fine
-   trim → test drive), ending in a ready-to-paste `RCServoMotorDriver`/
-   `PCA9685MotorDriver` constructor.
-2. **Trajectory Demo** (`TrajectoryDemo.html` + `TrajectoryDemo_Companion/`)
-   — a small, single-joint, ODrive-GUI-style live trajectory
-   visualizer/commander: set v<sub>max</sub>/a<sub>max</sub>, command a
-   step, a continuous post-trajectory square wave, or a continuous
-   trajectory-free sine wave, and watch setpoint vs. AS5600-measured
-   actual position/velocity/error live in rolling auto-scaled charts.
-   Includes a live toggle between the 2-point linear pulse↔angle formula
-   and a 20-point calibration lookup table, so the table's accuracy
-   improvement is visible interactively — color-coded error trace plus a
-   running mean-error comparison — instead of only recalled from prior
-   test data.
+- **`ServoCalibrator.html` + `ServoCalibrator_Companion/`** — one button
+  (`CALIBRATE`) stall-scans a servo's real mechanical pulse range and
+  builds a direction-averaged 20-point calibration lookup table, fully
+  automated, on-device. Once calibrated, the same page drives/visualizes
+  live trajectories against that table — a step, a continuous
+  post-trajectory square wave, or a continuous trajectory-free sine wave
+  — with three auto-scaled rolling charts (position/velocity/error) and
+  a live toggle between the 2-point linear formula and the 20-point
+  table, so the table's accuracy win is visible interactively. Table
+  import/export (JSON) lets you skip recalibrating a servo you've
+  already measured.
 
-Both grew out of `Servo_Auto_Calibrator` (a hand-built, single-servo
-characterization project — endpoint/hysteresis/repeatability, then a
-whole investigation into whether a calibration lookup table is worth
-adding to `RCServoMotorDriver` — see that project's own history for the
-"why" behind the numbers these tools now measure/use automatically) and
-depend on two sibling libraries, **Universal-Motor-Interface** and
+**Purely for characterization, not installation.** No direction test, no
+horn-install step, no logical zero shift — always the servo's own
+physical frame, `[0, maxAngleDeg]`. Turning a measured range/table into
+an actual `RCServoMotorDriver`/`PCA9685MotorDriver` constructor
+(direction, mounting offset, logical framing) is left to whatever
+application code consumes this tool's exported JSON — that's an
+installation concern, this tool has no way to know it.
+
+Depends on two sibling libraries, **Universal-Motor-Interface** and
 **Universal-Trajectory-Interface** (both mine, both currently private —
-see the README's dependency table for exactly what that means for
-building this repo's firmware).
+see the README's dependency table). Grew out of `Servo_Auto_Calibrator`
+(a hand-built, single-servo characterization project) — its raw CSVs are
+archived in [`historical-data/`](historical-data/); see that folder's
+own README for what they are.
 
-## Sketchbook layout (2026-08-09)
+## History: merged from two separate tools (2026-08-09)
 
-**This folder (`Arduino/Servo-Calibrator/`, a real `git clone` of this
-repo) is now the working root for this whole project — not the
-sketchbook's other top-level folders.** Cleaned up a pile of one-off
-test/experiment sketches that had accumulated directly under
-`Arduino/` (`TrajectorySmoothnessTest`, `DualVsAvgTest`,
-`UMI_CalTable_HWTest`, plus the now-redundant `ServoCalibrator_App`/
-`ServoCalibrator_Companion`/`TrajectoryDemo_App`/`TrajectoryDemo_Companion`
-source folders, superseded by this repo's own copies) — their useful
-conclusions are already captured in this repo, the wider sketchbook's
-other CLAUDE.md files, and project memory; the raw CSVs from the original
-`Servo_Auto_Calibrator` characterization project were archived into
-[`historical-data/`](historical-data/) first since those weren't
-duplicated anywhere else.
+This repo originally shipped **two** separate tools: a wizard-based
+`ServoCalibrator.html` (range-finding + an interactive installation
+wizard — horn position, direction test, fine trim, logical zero shift —
+ending in a generated `RCServoMotorDriver` constructor) and a
+`TrajectoryDemo.html` (live trajectory visualizer against a
+compile-time-fixed calibration table). Both are still in git history if
+the old wizard flow is ever needed as reference.
 
-**Going forward: any `.ino` needed temporarily (a smoke test, a one-off
-hardware check, a throwaway experiment) goes in a subfolder here**
-(`Servo-Calibrator/SomeTempTest/SomeTempTest.ino`), not as a sibling
-folder directly under `Arduino/`. `arduino-cli`'s sketchbook/user
-directory is still `Arduino/` itself (unchanged — `libraries/` stays
-there, that's where `arduino-cli` resolves dependencies from regardless
-of which subfolder a given sketch lives in), so this is purely an
-organizational choice, not a toolchain change. Temporary sketches don't
-need to be committed/pushed unless they turn into something worth
-keeping — `git status` in this folder will show them as untracked, which
-is fine; only `git add` what's actually meant to ship.
+**Merged into the single tool described above, per explicit direction**:
+purely characterization (no wizard, no generated constructor — "the
+constructor should be made on UMI side"), always physical-frame
+`[0, maxAngleDeg]` ("minimum is always 0, just like the table"), one
+button that runs the whole calibration ("one button for calibration that
+runs it"), then the existing trajectory-demo interface unchanged, plus
+table import/export. This was a real architecture change, not just a UI
+merge — see below for what actually had to change and why.
 
-The sketchbook's other top-level folders that predate this project
-entirely (`Arm_Inverse_Kinematics`, `CD22_Logger*`, `MyFiveBarRobot`,
-`ODriveCAN_UMI_Test`, `ServoHelper`, `Servo_Test`, `Traj_Planner`) were
-left alone — unrelated projects, not part of this cleanup.
+### Why `RCServoMotorDriver` couldn't be reused for this
 
-## Final goal: merge into one interface
+`RCServoMotorDriver` binds `calTable`/`calTableLen` at **construction**
+time — correct for a real application (you know your calibration up
+front), wrong for a tool that builds a table live, at runtime, from a
+physical sweep and needs to actually use it immediately afterward. So
+`ServoCalibrator_Companion.ino` doesn't construct one at all: it drives a
+raw `Servo` object directly and calls `ServoCalibrationTable.h`'s free
+functions (`computeServoPulseUs()`, the same function
+`RCServoMotorDriver::angleToPulseUs()` calls internally) itself, with a
+runtime `useTable` flag choosing which `calTable` argument (the real
+table, or `nullptr`) goes in on any given tick. This is the same
+approach the old `TrajectoryDemo_Companion` used for its live
+`MODEL LINEAR`/`MODEL TABLE` switch — this merge just extended it to
+also cover the calibration-building side, not only consumption.
 
-**These are not meant to stay two separate tools.** The end state is a
-single web app that does both calibration (what Servo Calibrator does
-today) and trajectory planning/visualization (what Trajectory Demo does
-today) — connect once, calibrate a servo, then immediately drive and
-visualize trajectories against that same calibration, without
-disconnecting, reconnecting, or re-entering any setup. Not started yet as
-of this commit — the two tools were deliberately built and validated
-*separately* first, so the merge starts from two known-working pieces
-instead of building both halves of a combined tool at once, untested.
+### Why the table can't be `PROGMEM`, and what that breaks
 
-Notes for whoever does the merge (kept here so they don't have to
-re-derive this from scratch):
+Every earlier `CalPoint` table in this project (`GenTable.h`, the
+`RCServoCalTableExample`) was a **compile-time** array, declared
+`PROGMEM`, read via `pgm_read_word()` — real flash access on AVR's
+Harvard architecture. `CALIBRATE` builds its table from a **live physical
+sweep at runtime**, so it inherently lives in ordinary SRAM — there is no
+way to make a runtime-computed array `PROGMEM` (that's a compile-time
+placement, not a runtime one). Pointing UMI's own `pgm_read_word()`-based
+readers (`lookupPulseUsFromTable()`, `validateCalTable()`) at a RAM
+address would misread RAM as flash and return garbage — documented as a
+footgun in `ServoCalibrationTable.h`'s own header comment, and now the
+actual reason this firmware can't just call those two functions
+directly.
 
-- **Firmware angle→pulse math should converge on `TrajectoryDemo_Companion`'s
-  approach, not `ServoCalibrator_Companion`'s.** Both ultimately need the
-  same real math (`ServoCalibrationTable.h`'s `computeServoPulseUs()`/
-  `validateCalTable()`, from Universal-Motor-Interface), but
-  `TrajectoryDemo_Companion` calls those functions directly against a raw
-  `Servo` object instead of going through `RCServoMotorDriver`,
-  specifically because it needs to swap the calibration model live at
-  runtime (`MODEL LINEAR`/`MODEL TABLE`) and `RCServoMotorDriver` binds
-  its table at construction with no runtime setter. A merged firmware
-  wanting both wizard-driven calibration moves *and* live trajectory
-  commands to share one angle↔pulse code path should follow that same
-  pattern.
-- **The two protocols are different in kind, not just content, and both
-  patterns need to coexist in a merge.** `ServoCalibrator_Companion` is
-  host-paced request/response (`CONFIG`/`MOVE`/`READ`/`ZERO`/`STOP` — the
-  PC drives every step, one at a time, blocking `readLine()`).
-  `TrajectoryDemo_Companion` runs autonomously and streams telemetry
-  continuously at a fixed ~50Hz rate regardless of whether a command just
-  arrived, using a *non-blocking* line reader
-  (`readSerialNonBlocking()`) so it can keep streaming between commands.
-  A merged firmware likely wants the non-blocking pattern throughout
-  (request/response commands processed between telemetry ticks, telemetry
-  only actually streaming while a trajectory/wizard-live-view is active)
-  rather than trying to bolt autonomous streaming onto the blocking
-  reader `ServoCalibrator_Companion` uses today.
-- **The two apps' UI shells are already visually consistent on purpose**
-  — same CSS custom-property token system, same card/pill/button/tab
-  component classes, same SVG line-chart helper pattern (`svgEl()`,
-  `niceStep()`, `drawRollingChart()`/`drawLineChart()`) — so the merge is
-  mostly an information-architecture problem (how a calibration wizard
-  and a live trajectory view coexist in one flow/page — tabs? a
-  post-calibration "now drive it" step?) rather than a visual-design
-  problem. Whichever shell wins, reuse its token set rather than
-  reconciling two independently-evolved palettes.
-- **Trajectory Demo's rolling-chart/telemetry-streaming JS
-  (`SerialLink` with a dedicated `onTelemetry` callback separate from
-  the command/response queue, plus the `requestAnimationFrame`-decoupled
-  render loop) is the piece Servo Calibrator has no equivalent of and
-  would need if, post-merge, the calibration wizard ever wants a live
-  chart too** (e.g. watching the encoder in real time during the fine-trim
-  step, instead of only reading a value after each discrete move).
+**Fix**: `ServoCalibrator_Companion.ino` has its own
+`lookupPulseFromRamTable()`/`validateRamCalTable()` — the minimal
+necessary re-implementation of UMI's exact same algorithms (binary
+search + linear interpolation; length/ordering/coverage/plausibility
+checks) against plain RAM instead of `PROGMEM`. Everything that *doesn't*
+touch `PROGMEM` — the `CalPoint` type itself, the linear-formula branch
+of `computeServoPulseUs()` (never reads the table pointer at all when
+it's `nullptr`), and the shared value-only helpers
+(`isPlausiblePulseUs()`, `roundClampToInt16()`,
+`CAL_TABLE_MIN_POINTS`/`MAX_POINTS`) — still comes straight from
+`ServoCalibrationTable.h` unmodified. If a future revision ever wants
+this firmware to fall back to a compile-time default table (e.g. "use
+this known-good table until the user recalibrates"), that default *can*
+be a real `PROGMEM` array read through UMI's own functions — the
+RAM-only path is specifically for the "built live, this session" case.
 
-## Servo Calibrator
+### Protocol: request/response calibration, autonomous trajectory streaming, in one firmware
 
-Full protocol reference, wiring, safety notes, and known limitations are
-in the [README](README.md) (public-facing) — this section is
-implementation notes for working on the code itself.
+The two predecessor firmwares were architecturally different in kind:
+`ServoCalibrator_Companion` (old) was host-paced request/response;
+`TrajectoryDemo_Companion` ran autonomously and streamed telemetry
+continuously via a non-blocking reader. The merged firmware keeps both
+patterns, cleanly separated by *when* they're used rather than trying to
+unify them into one shape:
 
-- **`ServoCalibrator_Companion.ino`** — dumb, host-paced command
-  executor. Supports either a raw RC servo on a digital pin or a PCA9685
-  channel (via Universal-Motor-Interface's `PCA9685Backend`), exactly one
-  at a time, chosen at runtime via `CONFIG`. No calibration layer in the
-  firmware at all — that's the point, this firmware is for *discovering*
-  the range/direction/zero that feed a calibrated driver, not consuming
-  one. Encoder is Universal-Encoder-Interface's `AS5600EncoderDriver` in
-  continuous mode. `READ`'s third response field
-  (`AS5600EncoderDriver::magnetStatusCode()`) reports *why* a reading is
-  bad (no magnet / too weak / too strong / chip not responding), not just
-  a valid/invalid bit — matters once the servo's installed in its real
-  application, where the magnet/sensor air gap may no longer match the
-  bench setup.
-- **`ServoCalibrator.html`** — all real logic (stall detection,
-  settle-until-stable polling, the wizard's direction/offset math, live
-  charts, file save/load) lives here; the firmware doesn't know any of it
-  exists. Design decisions worth knowing before changing the flow:
-  range-finding and installation are deliberately separable/saveable
-  steps (range is a property of the bare servo; install position/
-  direction/trim are properties of one specific mounting, possibly done
-  later by someone else with just the saved JSON); direction is a live
-  y/n hardware test in the wizard, not a pre-filled toggle, because the
-  point is to *feel* like the source `RCServoCalibration.ino` wizard's
-  guided experience; no backlash compensation in the generated
-  constructor (`RCServoMotorDriver`/`PCA9685MotorDriver` have no hook for
-  it — see the pivot note in `Servo_Auto_Calibrator`'s own history for
-  why that was judged not worth adding in general).
-- Real bugs found via actual browser+hardware testing (not just code
-  review) worth knowing about if touching this flow again: a stray
-  `STOP` at the end of range-finding used to leave the wizard's first
-  move silently failing (`ERR NOT_CONFIGURED`) with no visible cause
-  until the raw serial log was read — fixed with an explicit
-  `configApplied` staleness flag + an in-wizard "Apply configuration
-  now" banner; a live readout bug where flipping direction moved the
-  servo correctly but displayed the *raw* (un-transformed) AS5600 angle,
-  looking wrong even though positioning was fine the whole time — fixed
-  with `rawAngleDegToLogicalDeg()`, the algebraic inverse of the move
-  math, verified by round-tripping known values; a firmware-RAM-reset
-  gotcha where the AS5600's software zero (set via `ZERO`) doesn't
-  survive a board reset/reflash between range-finding and wizard use,
-  silently offsetting every subsequent readout by a large constant —
-  fixed with self-detecting `ensureZeroAnchored()` drift correction
-  rather than assuming the board's state survives.
+- `CALIBRATE` is a **deliberately blocking** one-shot routine (adapted
+  directly from UMI's own `examples/RCServoAutoCalibration` — stall-scan
+  both directions with a sliding-window net-delta check, sweep twice,
+  average) — no other command is serviced while it runs, same as a human
+  would expect a physical 1–3 minute sweep to occupy the board. The
+  browser's own `sendCommand()` just uses a long timeout (240s) rather
+  than needing any new client-side protocol machinery.
+- Once calibrated, `loop()` is non-blocking again: `GO`/`SQUARE`/`SINE`/
+  `STOP`/`MODEL` are request/response as before, and telemetry streams
+  continuously at ~50Hz alongside them, exactly like the old
+  `TrajectoryDemo_Companion`.
+- `CALRESULT`'s wire format is deliberately **identical** to `IMPORT`'s
+  expected input (`<maxAngleDeg> <minPulseUs> <maxPulseUs>` + 20
+  `<pulseUs> <angleCentideg>` pairs) — a saved export can be replayed
+  as an `IMPORT` command byte-for-byte, and the browser's own
+  `parseCalResult()`/`buildImportCommand()` are exact inverses of each
+  other. `GETTABLE` re-emits the same shape on demand (without
+  recalibrating) so a page reload/reconnect can recover state as long as
+  the board itself hasn't reset.
+- `zeroRefAngle`/`signConv` (the AS5600 live-reading reference this
+  project has used since `TrajectoryDemo_Companion`) come **directly out
+  of `CALIBRATE`'s own stall-scan data** now (the low-endpoint's
+  running-angle value, and the sign of the endpoint-to-endpoint delta) —
+  no separate dedicated probe move needed, since the scan already visits
+  both endpoints. `IMPORT` still needs its own quick physical re-anchor
+  (~2 small moves) since an imported table carries the pulse curve but no
+  live sensor reference for *this* mounting/session.
 
-## Trajectory Demo
+### Verified on real hardware (2026-08-09)
 
-- **`TrajectoryDemo_Companion.ino`** — runs the trajectory itself
-  on-device (Universal-Trajectory-Interface's `TrapezoidalProfile`,
-  planned/evaluated at a fixed ~50Hz alongside continuous telemetry
-  streaming) rather than being paced by the host. State machine:
-  `IDLE`/`MOVE`/`SQUARE`/`SINE`, all funneling through one
-  `currentSetpointDeg()` that's the single authoritative "where should we
-  be right now" for whichever mode is active — every mode transition
-  (`GO`/`SQUARE`/`SINE`/`STOP`, and the live `MODEL` switch) replans from
-  that live value, never from a stale target, so nothing jumps when
-  switching. `SQUARE` is "post-trajectory" (every edge is still a real
-  `TrapezoidalProfile` move, replanned smoothly from wherever the setpoint
-  currently is if a transition hasn't finished when the next one is due
-  — a period too short for the chosen v/a legitimately produces a
-  triangle-ish oscillation that never reaches its extremes, which is
-  correct behavior, not a bug). `SINE` is analytic and deliberately
-  bypasses the trajectory profile entirely ("no traj" — no v/a clamp,
-  amplitude×2π×freq *is* the effective peak speed), easing in via one
-  ordinary trapezoidal move to center first so starting it never jumps.
-  `MODEL LINEAR`/`MODEL TABLE` flips which calibration model computes the
-  pulse width, live, without touching the setpoint/mode state at all —
-  see [Final goal](#final-goal-merge-into-one-interface) above for why
-  this firmware calls `ServoCalibrationTable.h` directly instead of
-  going through `RCServoMotorDriver`.
-- **`TrajectoryDemo.html`** — side-by-side layout (a fixed-height flex
-  page, controls in a ~360px left column, charts filling the right column
-  — deliberately not a top-to-bottom scroll, so settings and the live
-  charts are visible together) with a Step/Square/Sine tab strip, a
-  Linear/Table model toggle, and three auto-scaled rolling charts
-  (position, velocity, error — the error chart's line is colored per
-  point by which model was active, plus a live mean-error-per-model
-  readout, so a live model switch is visible both as a chart color change
-  and as an actual number). Rendering is decoupled from the ~50Hz serial
-  arrival rate onto its own `requestAnimationFrame` loop — telemetry
-  parsing just buffers cheaply, a separate loop redraws from whatever's
-  currently buffered.
-- A real firmware bug was caught and fixed via testing, not just review:
-  the boot AS5600 zero-reference was briefly hardcoded to `0.0f` instead
-  of using `pollUntilSettled()`'s actual return value — silently correct
-  only when the servo happened to already be near physical zero at boot
-  (true by coincidence in one early smoke test), silently wrong whenever
-  it wasn't (true once a *different* prior sketch left the servo at the
-  opposite end of its range, exposing a real ~151° offset on first boot).
-  Fixed by capturing the actual settled value instead of assuming it.
+Full command sequence run against real hardware, not just read-reviewed:
+`PING`; `GO` before calibration correctly rejected
+(`ERR NOT_CALIBRATED`); a real `CALIBRATE` run (350–2630µs, 214.7° stroke
+— matches this servo's previously-known range closely); `GETTABLE`
+byte-identical to the `CALRESULT` that produced it; `GO`/`MODEL LINEAR`/
+`MODEL TABLE`/`MODEL BOGUS` (correctly rejected)/`SQUARE`/`SINE`/`STOP`
+all working; `IMPORT` re-importing the exact just-calibrated table
+(including the re-anchor step), `GETTABLE` afterward still exactly
+matching the original `CALRESULT`; a malformed `IMPORT` (wrong point
+count) correctly rejected. Separately, the browser side was mock-tested
+via `claude-in-chrome` against the real page code (not a
+reimplementation): the full connect → auto-`GETTABLE`-recovery →
+`CALIBRATE` → unlock flow, `Export`'s downloaded JSON matching the
+applied calibration exactly, `Import`'s round-trip building the correct
+`IMPORT` command and updating the UI, and a malformed import file
+rejected client-side before ever touching the serial link.
 
 ## Requirements & dependencies
 
-Same as documented in the [README](README.md) for `ServoCalibrator_Companion`,
-plus, for `TrajectoryDemo_Companion` specifically: **Universal-Trajectory-Interface**
-(mine, private) for `TrapezoidalProfile`, and Universal-Motor-Interface's
-`ServoCalibrationTable.h` (used directly, not via `RCServoMotorDriver` —
-see [Final goal](#final-goal-merge-into-one-interface) above for why).
-Both companion firmwares also need RobTillaart's `AS5600` library
-(public). Browser requirement is the same for both apps: Chrome or Edge,
-served over `http://` (Web Serial does not reliably work opened directly
-as a `file://` URL — confirmed for `ServoCalibrator.html`; unconfirmed
-either way for `TrajectoryDemo.html`, untested via `file://`).
+Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
+now unconditionally needs **both** Universal-Motor-Interface
+(`ServoCalibrationTable.h`) and Universal-Trajectory-Interface
+(`TrapezoidalProfile`), plus RobTillaart's `AS5600` (public). No PCA9685
+support in this firmware yet (the old wizard-era version had it — see
+git history; `ServoCalibrationTable.h`'s math is transport-agnostic, so
+adding it back would mean swapping the raw `Servo` calls for
+`PCA9685Backend` ones, not touching the calibration/table logic at all).

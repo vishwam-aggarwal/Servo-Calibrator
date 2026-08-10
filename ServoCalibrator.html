@@ -15,16 +15,14 @@
     --text-muted:  #7a7d82;
     --border:      rgba(20,23,26,0.10);
     --border-2:    rgba(20,23,26,0.18);
-    --down:        #2a78d6;
-    --up:          #eb6834;
-    --ref:         #1baf7a;
+    --down:        #2a78d6;   /* setpoint / "square" mode */
+    --up:          #eb6834;   /* actual / "step" mode / linear model */
+    --ref:         #1baf7a;   /* error / "sine" mode / table model */
     --grid:        #e4e3de;
     --axis:        #c7c6c0;
     --good:        #0ca30c;
     --warn:        #fab219;
     --crit:        #d03b3b;
-    --tooltip-bg:  #14171a;
-    --tooltip-fg:  #fcfcfb;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -34,7 +32,6 @@
       --border:rgba(255,255,255,0.10); --border-2:rgba(255,255,255,0.18);
       --down:#3987e5; --up:#d95926; --ref:#199e70;
       --grid:#26292d; --axis:#34383d; --good:#0ca30c; --warn:#fab219; --crit:#e66767;
-      --tooltip-bg:#f5f6f7; --tooltip-fg:#14171a;
     }
   }
   :root[data-theme="dark"] {
@@ -44,554 +41,334 @@
     --border:rgba(255,255,255,0.10); --border-2:rgba(255,255,255,0.18);
     --down:#3987e5; --up:#d95926; --ref:#199e70;
     --grid:#26292d; --axis:#34383d; --good:#0ca30c; --warn:#fab219; --crit:#e66767;
-    --tooltip-bg:#f5f6f7; --tooltip-fg:#14171a;
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html, body { margin: 0; padding: 0; height: 100%; }
   body {
     background: var(--page);
     color: var(--text-1);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .mono { font-family: ui-monospace, "Cascadia Mono", "Consolas", "Liberation Mono", Menlo, monospace; }
 
-  .page { max-width: 1080px; margin: 0 auto; padding: 40px 24px 96px; display: flex; flex-direction: column; gap: 28px; }
+  .page { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 18px 22px 16px; gap: 14px; max-width: 1600px; width: 100%; margin: 0 auto; }
 
-  header { display: flex; flex-direction: column; gap: 8px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  header { flex: none; display: flex; flex-direction: column; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
   .eyebrow {
-    font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600;
+    font-family: ui-monospace, monospace; font-size: 10.5px; font-weight: 600;
     letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted);
   }
-  h1 { margin: 0; font-size: clamp(22px, 3vw, 28px); font-weight: 650; letter-spacing: -0.01em; }
-  .subhead { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-2); max-width: 72ch; }
+  h1 { margin: 0; font-size: clamp(19px, 2.4vw, 24px); font-weight: 650; letter-spacing: -0.01em; }
+  .subhead { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); max-width: 92ch; }
+
+  /* ---- Side-by-side layout: controls on the left, charts on the
+     right, both visible together without scrolling the page itself.
+     Each column scrolls independently if its own content overflows. ---- */
+  .main-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 360px 1fr; gap: 18px; }
+  @media (max-width: 880px) {
+    body { height: auto; overflow: auto; }
+    .main-grid { grid-template-columns: 1fr; }
+  }
+  .left-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .right-col { min-height: 0; display: flex; flex-direction: column; }
 
   section.card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 5px;
-    padding: 20px 22px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
     transition: opacity 0.15s;
   }
   section.card.disabled { opacity: 0.45; pointer-events: none; }
-  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .card-title { font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
-  .step-num {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 20px; height: 20px; border-radius: 50%;
-    background: var(--surface-2); border: 1px solid var(--border-2);
-    font-size: 11px; font-weight: 700; font-family: ui-monospace, monospace; color: var(--text-muted);
-  }
-  .step-num.done { background: var(--good); border-color: var(--good); color: #fff; }
-  .card-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; max-width: 76ch; }
-  .card-desc strong { color: var(--text-2); }
+  #card-charts { flex: 1; min-height: 0; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .card-title { font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+  .card-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
 
   .pill {
     display: inline-flex; align-items: center; gap: 5px;
-    font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 100px;
+    font-size: 10.5px; font-weight: 600; padding: 3px 9px; border-radius: 100px;
     font-family: ui-monospace, monospace;
   }
-  .pill.status-off { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border-2); }
-  .pill.status-good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
-  .pill.status-warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
-  .pill.status-crit { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); }
+  .pill.status-off    { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border-2); }
+  .pill.status-good   { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .pill.status-warn   { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+  .pill.status-crit   { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); }
+  .pill.status-info   { background: color-mix(in srgb, var(--down) 18%, transparent); color: var(--down); }
+  .pill.status-accent { background: color-mix(in srgb, var(--ref) 18%, transparent); color: var(--ref); }
   .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 16px; }
-  .field { display: flex; flex-direction: column; gap: 5px; }
-  .field label { font-size: 11.5px; font-weight: 600; color: var(--text-2); }
-  .field .hint { font-size: 10.5px; color: var(--text-muted); line-height: 1.45; }
-  input[type="number"], input[type="text"], select {
-    font-family: ui-monospace, monospace; font-size: 13px;
+  .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 10px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 10.5px; font-weight: 600; color: var(--text-2); }
+  .field .hint { font-size: 9.5px; color: var(--text-muted); line-height: 1.4; grid-column: 1 / -1; }
+  input[type="number"] {
+    font-family: ui-monospace, monospace; font-size: 12.5px;
     background: var(--surface-2); color: var(--text-1);
     border: 1px solid var(--border-2); border-radius: 4px;
-    padding: 7px 9px; width: 100%;
+    padding: 6px 8px; width: 100%;
   }
-  input:focus, select:focus, button:focus-visible {
-    outline: 2px solid var(--down); outline-offset: 1px;
-  }
-  .radio-row { display: flex; gap: 16px; flex-wrap: wrap; }
-  .radio-opt { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-  .checkbox-opt { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); }
+  input:focus, button:focus-visible { outline: 2px solid var(--down); outline-offset: 1px; }
+  input:disabled { opacity: 0.5; }
 
   button {
-    font: inherit; font-size: 13px; font-weight: 600;
-    padding: 8px 16px; border-radius: 4px; border: 1px solid var(--border-2);
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 7px 14px; border-radius: 4px; border: 1px solid var(--border-2);
     background: var(--surface-2); color: var(--text-1); cursor: pointer;
   }
   button.primary { background: var(--down); border-color: var(--down); color: #fff; }
   button.primary:hover { filter: brightness(1.08); }
-  button.big { padding: 10px 22px; font-size: 14px; }
+  button.danger { background: var(--crit); border-color: var(--crit); color: #fff; }
+  button.full { width: 100%; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   label.filebtn {
-    display: inline-flex; align-items: center; font-size: 13px; font-weight: 600;
-    padding: 8px 16px; border-radius: 4px; border: 1px solid var(--border-2);
+    display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600;
+    padding: 7px 14px; border-radius: 4px; border: 1px solid var(--border-2);
     background: var(--surface-2); color: var(--text-1); cursor: pointer;
   }
   label.filebtn input { display: none; }
+  label.filebtn.disabled { opacity: 0.4; pointer-events: none; }
 
-  .readout-row { display: flex; gap: 22px; flex-wrap: wrap; align-items: baseline; }
-  .readout { display: flex; flex-direction: column; gap: 2px; }
-  .readout-label { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.03em; text-transform: uppercase; }
-  .readout-value { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  /* ---- Tabs (Step / Square / Sine) ---- */
+  .tab-row { display: flex; gap: 4px; background: var(--surface-2); border-radius: 5px; padding: 3px; }
+  .tab-btn {
+    flex: 1; background: transparent; border: none; padding: 6px 8px;
+    font-size: 11.5px; font-weight: 650; color: var(--text-muted); border-radius: 4px; cursor: pointer;
+  }
+  .tab-btn.active { background: var(--surface); color: var(--text-1); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .tab-panel { display: none; flex-direction: column; gap: 10px; }
+  .tab-panel.active { display: flex; }
 
-  .progress-track { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
-  .progress-fill { height: 100%; background: var(--down); width: 0%; transition: width 0.2s; }
-  .phase-label { font-size: 12.5px; color: var(--text-2); font-family: ui-monospace, monospace; }
+  .model-row { display: flex; flex-direction: column; gap: 5px; }
+  .model-label { font-size: 10.5px; font-weight: 600; color: var(--text-2); }
+  .model-label .hint { font-weight: 400; text-transform: none; letter-spacing: normal; }
+  .model-btn.active { background: color-mix(in srgb, var(--m-color) 20%, var(--surface)); color: var(--m-color); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m-color) 45%, transparent); }
+
+  .readout-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
+  .readout { display: flex; flex-direction: column; gap: 1px; }
+  .readout-label { font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.03em; text-transform: uppercase; }
+  .readout-value { font-family: ui-monospace, monospace; font-size: 16px; font-weight: 650; }
+
+  .charts { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+  .chart-block { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; }
+  .chart-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; flex: none; }
+  .chart-title { font-size: 11.5px; font-weight: 650; color: var(--text-2); }
+  .legend { display: flex; gap: 12px; font-size: 10px; color: var(--text-muted); }
+  .legend .item { display: flex; align-items: center; gap: 4px; }
+  .legend .swatch { width: 9px; height: 2.5px; border-radius: 2px; }
+  .chart-wrap { flex: 1; min-height: 0; }
+  svg.chart { width: 100%; height: 100%; display: block; overflow: visible; background: var(--surface-2); border-radius: 4px; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+  .zero-line { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+  .tick-label { font-family: ui-monospace, monospace; font-size: 9px; fill: var(--text-muted); }
+  .series-path { fill: none; stroke-width: 1.7; }
 
   .log-box {
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
-    padding: 8px 10px; font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.6;
-    color: var(--text-muted); max-height: 130px; overflow-y: auto; white-space: pre-wrap;
+    padding: 6px 8px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.55;
+    color: var(--text-muted); max-height: 90px; overflow-y: auto; white-space: pre-wrap;
   }
-
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-  .stat { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
-  .stat-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
-  .stat-value { font-family: ui-monospace, monospace; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .stat-sub { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-muted); }
-
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); font-family: ui-monospace, monospace; }
-  .legend-swatch { width: 13px; height: 2.5px; border-radius: 1px; flex: none; }
-
-  .chart-wrap { position: relative; width: 100%; }
-  svg.chart { width: 100%; height: auto; display: block; overflow: visible; }
-  .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
-  .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
-  .tick-label { font-family: ui-monospace, monospace; font-size: 10px; fill: var(--text-muted); }
-  .series-path { fill: none; stroke-width: 2; }
-
-  pre.code-block {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
-    padding: 14px 16px; font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.6;
-    overflow-x: auto; color: var(--text-1); white-space: pre;
-  }
-
-  .warn-box {
-    background: color-mix(in srgb, var(--warn) 12%, var(--surface));
-    border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border));
-    border-radius: 4px; padding: 10px 14px; font-size: 12.5px; line-height: 1.55; color: var(--text-2);
-  }
-
-  .divider {
-    display: flex; align-items: center; gap: 12px;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--text-muted); margin: 2px 0;
-  }
-  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border-2); }
-
-  .wizard-step { display: none; flex-direction: column; gap: 12px; }
-  .wizard-step.active { display: flex; }
-  .wizard-progress { display: flex; gap: 6px; margin-bottom: 4px; }
-  .wizard-dot {
-    width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-family: ui-monospace, monospace; font-size: 10.5px; font-weight: 700;
-    background: var(--surface-2); border: 1px solid var(--border-2); color: var(--text-muted);
-  }
-  .wizard-dot.active { background: var(--down); border-color: var(--down); color: #fff; }
-  .wizard-dot.done { background: var(--good); border-color: var(--good); color: #fff; }
-  .step-title { font-size: 14px; font-weight: 650; }
-  .step-body { font-size: 13px; line-height: 1.65; color: var(--text-2); max-width: 74ch; }
-  .step-body code { font-family: ui-monospace, monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
-  .trim-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .trim-step-btn { font-size: 18px; padding: 6px 18px; }
-
-  footer { font-size: 11.5px; color: var(--text-muted); text-align: center; padding-top: 12px; }
+  .cal-summary { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-2); }
 </style>
 </head>
 <body>
 <div class="page">
 
   <header>
-    <div class="eyebrow">Universal-Motor-Interface companion tool</div>
+    <div class="eyebrow">Universal-Motor-Interface + Universal-Trajectory-Interface companion tool</div>
     <h1>Servo Calibrator</h1>
     <p class="subhead">
-      Drives an Arduino running <code class="mono">ServoCalibrator_Companion.ino</code> over Web Serial and
-      uses an AS5600 encoder as ground truth. Two things it can do, independently: <strong>find a servo's
-      real pulse range/travel</strong> (to feed into <code class="mono">RCServoCalibration.ino</code> by
-      hand later, or save for this tool to finish later), and <strong>run the whole installation/calibration
-      wizard itself</strong> &mdash; the same steps as that sketch, just guided by the encoder instead of
-      eyeballing, ending in a ready-to-paste constructor.
+      Purely for characterization: one button finds a servo's real pulse range and builds a 20-point calibration
+      lookup table, fully automated, on-device &mdash; no installation wizard, no direction/logical-zero setup
+      (always physical <code class="mono">[0, maxAngle]</code>, just like the table itself). Building an actual
+      driver constructor from the result is left to your own UMI application code. Once calibrated, drive/visualize
+      trajectories against it live, and export/import the table to skip recalibrating a servo you've already measured.
     </p>
   </header>
 
-  <div class="warn-box" id="browserWarning" style="display:none;">
-    <strong>Web Serial isn't available in this browser.</strong> This tool needs Chrome or Edge (desktop).
-    If Connect stays greyed out even there, try serving this file over
-    <code class="mono">http://localhost</code> instead of opening it directly
-    (e.g. <code class="mono">npx serve</code> or <code class="mono">python -m http.server</code> in this folder).
-  </div>
+  <div class="main-grid">
+    <div class="left-col">
 
-  <!-- ===================== SERVO NAME ===================== -->
-  <section class="card">
-    <div class="card-title">Servo name</div>
-    <p class="card-desc">
-      Used for saved/downloaded filenames, and as the variable name in the generated constructor
-      (e.g. <code class="mono">gripper</code> &rarr; <code class="mono">RCServoMotorDriver gripper(...)</code>).
-      Letters, numbers, underscores.
-    </p>
-    <input type="text" id="inServoName" value="myServo" style="max-width:280px;" />
-  </section>
-
-  <!-- ===================== 1. CONNECT ===================== -->
-  <section class="card" id="card-connect">
-    <div class="card-head">
-      <div class="card-title"><span class="step-num" id="step1">1</span> Connect</div>
-      <span class="pill status-off" id="connPill"><span class="pill-dot"></span>Disconnected</span>
-    </div>
-    <p class="card-desc">
-      Flash <code class="mono">ServoCalibrator_Companion.ino</code> to your board first, then connect here.
-      Needed for both the range finder and the installation wizard below.
-    </p>
-    <div class="btn-row">
-      <button class="primary" id="btnConnect">Connect to board&hellip;</button>
-      <button id="btnDisconnect" disabled>Disconnect</button>
-      <button id="btnPing" disabled>Ping</button>
-    </div>
-    <div class="log-box" id="log"></div>
-  </section>
-
-  <!-- ===================== 2. CONFIGURE ===================== -->
-  <section class="card disabled" id="card-config">
-    <div class="card-head">
-      <div class="card-title"><span class="step-num" id="step2">2</span> Configure hardware</div>
-    </div>
-
-    <div class="field">
-      <label>Motor output</label>
-      <div class="radio-row">
-        <label class="radio-opt"><input type="radio" name="motorType" value="servo" checked /> RC servo on a digital pin</label>
-        <label class="radio-opt"><input type="radio" name="motorType" value="pca9685" /> PCA9685 I2C channel</label>
-      </div>
-    </div>
-
-    <div class="form-grid" id="servoFields">
-      <div class="field">
-        <label>Signal pin (digital pin number)</label>
-        <input type="number" id="inPin" value="17" min="0" max="99" />
-        <div class="hint">Use the underlying digital pin number, not the silkscreen label &mdash; e.g. A3 on an Uno/Nano is digital pin 17. Avoid pins 0/1 (Serial).</div>
-      </div>
-      <div class="field">
-        <label>Min pulse (&micro;s)</label>
-        <input type="number" id="inAttachMin" value="400" />
-      </div>
-      <div class="field">
-        <label>Max pulse (&micro;s)</label>
-        <input type="number" id="inAttachMax" value="2600" />
-        <div class="hint">Wide attach range so the sweep isn't silently clamped &mdash; the whole point is finding the real limits.</div>
-      </div>
-    </div>
-
-    <div class="form-grid" id="pcaFields" style="display:none;">
-      <div class="field">
-        <label>I2C address (hex)</label>
-        <input type="text" id="inPcaAddr" value="40" />
-      </div>
-      <div class="field">
-        <label>Channel (0&ndash;15)</label>
-        <input type="number" id="inPcaChannel" value="0" min="0" max="15" />
-      </div>
-      <div class="field">
-        <label>PWM frequency (Hz)</label>
-        <input type="number" id="inPcaFreq" value="50" />
-      </div>
-    </div>
-
-    <div class="btn-row">
-      <button class="primary" id="btnApplyConfig">Apply configuration</button>
-      <span class="pill status-off" id="cfgPill"><span class="pill-dot"></span>Not configured</span>
-    </div>
-  </section>
-
-  <!-- ===================== 3. MANUAL CHECK ===================== -->
-  <section class="card disabled" id="card-manual">
-    <div class="card-head">
-      <div class="card-title"><span class="step-num" id="step3">3</span> Manual sanity check</div>
-    </div>
-    <p class="card-desc">Jog the servo by hand and confirm the encoder tracks it before trusting an automated sweep to it.</p>
-    <div class="form-grid">
-      <div class="field">
-        <label>Pulse width (&micro;s)</label>
-        <input type="number" id="inManualUs" value="1500" />
-      </div>
-    </div>
-    <div class="btn-row">
-      <button id="btnManualMove">Move</button>
-      <button id="btnManualRead">Read encoder</button>
-    </div>
-    <div class="readout-row">
-      <div class="readout"><div class="readout-label">Angle</div><div class="readout-value" id="manualAngle">&mdash;</div></div>
-      <div class="readout"><div class="readout-label">Encoder status</div><div class="readout-value" id="manualValid">&mdash;</div></div>
-    </div>
-    <div class="warn-box" id="manualStatusDetail" style="display:none;"></div>
-  </section>
-
-  <!-- ===================== 4. RANGE FINDER ===================== -->
-  <section class="card disabled" id="card-sweep">
-    <div class="card-head">
-      <div class="card-title"><span class="step-num" id="step4">4</span> Range finder</div>
-    </div>
-    <p class="card-desc">
-      Finds the servo's real minimum/maximum pulse width and total mechanical travel by walking it outward
-      from center until the encoder shows no further movement &mdash; the same goal as
-      <code class="mono">RCServoRangeFinder.ino</code>, just detected automatically instead of by ear.
-      <strong>This is a property of the bare servo, not of any specific installation</strong>: do it with the
-      horn free and clearly visible, <strong>no linkage, mechanism, gearbox, or load attached</strong> (same
-      safety note as that sketch). Once you have a result you can either save it and stop here &mdash; to use
-      later with the raw wizard sketch or reload into this tool when you're ready to install the servo &mdash;
-      or continue straight into the installation wizard below.
-    </p>
-
-    <div class="divider">already have a saved result for this exact servo?</div>
-    <div class="btn-row">
-      <label class="filebtn">Load a saved range-finding file&hellip;<input type="file" id="inLoadRange" accept="application/json" /></label>
-      <span class="readout-value" id="loadStatus" style="font-size:12.5px;"></span>
-    </div>
-    <div class="divider">or measure it now</div>
-
-    <div class="form-grid">
-      <div class="field">
-        <label>Center / start pulse (&micro;s)</label>
-        <input type="number" id="inCenterUs" value="1500" />
-      </div>
-      <div class="field">
-        <label>Hard safety min (&micro;s)</label>
-        <input type="number" id="inHardMin" value="350" />
-        <div class="hint">Fail-safe ceiling in case stall detection doesn't trigger.</div>
-      </div>
-      <div class="field">
-        <label>Hard safety max (&micro;s)</label>
-        <input type="number" id="inHardMax" value="2650" />
-      </div>
-      <div class="field">
-        <label>Step size (&micro;s)</label>
-        <input type="number" id="inStepUs" value="2" min="1" />
-      </div>
-      <div class="field">
-        <label>Settle per step (ms)</label>
-        <input type="number" id="inStepDelay" value="20" min="0" />
-      </div>
-    </div>
-    <label class="checkbox-opt"><input type="checkbox" id="inMeasureHysteresis" checked />
-      Also measure backlash (adds roughly a minute; diagnostic only &mdash; RCServoMotorDriver/PCA9685MotorDriver
-      have no correction-table hook, so this doesn't change the generated constructor, but it's useful to know).</label>
-
-    <div class="btn-row">
-      <button class="primary" id="btnStartSweep">Start range finder</button>
-      <button id="btnAbortSweep" disabled>Abort</button>
-    </div>
-
-    <div class="phase-label" id="phaseLabel">Idle</div>
-    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-
-    <div class="chart-wrap" id="wrap-live"></div>
-
-    <div class="stats-grid" id="quickStats" style="display:none;"></div>
-    <div class="btn-row" id="postRangeActions" style="display:none;">
-      <button id="btnSaveRange">Save range-finding result&hellip;</button>
-      <button class="primary" id="btnContinueToWizard">Continue to installation wizard &darr;</button>
-    </div>
-  </section>
-
-  <!-- ===================== 5. RESULTS / DIAGNOSTICS ===================== -->
-  <section class="card disabled" id="card-results">
-    <div class="card-head">
-      <div class="card-title"><span class="step-num" id="step5">5</span> Range-finder diagnostics</div>
-    </div>
-
-    <div>
-      <div class="card-title" style="font-size:13px;margin-bottom:6px;">Pulse &harr; angle curve</div>
-      <div class="legend">
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--down)"></span>Down sweep</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--up)"></span>Up sweep</div>
-      </div>
-      <div class="chart-wrap" id="wrap-cal"></div>
-    </div>
-
-    <div id="backlashChartBlock">
-      <div class="card-title" style="font-size:13px;margin-bottom:6px;">Backlash vs. pulse (from the hysteresis loop)</div>
-      <div class="chart-wrap" id="wrap-backlash"></div>
-    </div>
-  </section>
-
-  <!-- ===================== 6. INSTALLATION & CALIBRATION WIZARD ===================== -->
-  <section class="card disabled" id="card-wizard">
-    <div class="card-head">
-      <div class="card-title"><span class="step-num" id="step6">6</span> Installation &amp; calibration wizard</div>
-    </div>
-    <p class="card-desc">
-      Mirrors <code class="mono">RCServoCalibration.ino</code>'s steps 2&ndash;7 exactly (steps 0/1 there
-      are the pulse-range/travel questions &mdash; already answered by the range finder above), just guided by
-      the encoder instead of eyeballing. Do this with the servo actually mounted in your application.
-    </p>
-    <div class="warn-box" id="wizardConnWarning" style="display:none;">
-      Range data is loaded, but you're not connected to a board right now &mdash; every move below will fail.
-      Connect at the top of the page first (configuration can be applied right here once connected).
-    </div>
-    <div class="warn-box" id="wizardConfigWarning" style="display:none;">
-      <div id="wizardConfigSummary"></div>
-      <div class="btn-row" style="margin-top:8px;">
-        <button class="primary" id="btnApplyConfigWizard">Apply configuration now</button>
-      </div>
-    </div>
-    <div class="warn-box" id="wizardError" style="display:none;"></div>
-
-    <div class="wizard-progress">
-      <div class="wizard-dot" data-wstep="0">2</div>
-      <div class="wizard-dot" data-wstep="1">3</div>
-      <div class="wizard-dot" data-wstep="2">4</div>
-      <div class="wizard-dot" data-wstep="3">5</div>
-      <div class="wizard-dot" data-wstep="4">6</div>
-      <div class="wizard-dot" data-wstep="5">7</div>
-    </div>
-
-    <!-- STEP 2 -->
-    <div class="wizard-step" data-wstep="0">
-      <div class="step-title">STEP 2 &mdash; Logical angle range</div>
-      <p class="step-body">
-        Your <strong>logical</strong> angle range is how <em>your own code</em> will refer to positions &mdash;
-        it doesn't have to match the servo's raw 0&hellip;travel range. Enter where you want logical zero to
-        sit, as an offset from the servo's physical minimum. Example: on a servo with 180&deg; of travel,
-        entering <code>-90</code> gives you a logical range of -90&deg;..+90&deg; (a common, intuitive choice
-        &mdash; 0 becomes the mechanical center). Entering <code>0</code> just uses 0&hellip;travel directly.
-      </p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Logical zero shift (deg)</label>
-          <input type="number" id="inLogicalShift" value="0" />
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title">Connection</div>
+          <span class="pill status-off" id="pill-conn"><span class="pill-dot"></span><span id="pill-conn-text">Not connected</span></span>
         </div>
-      </div>
-      <div class="btn-row"><button class="primary" id="btnWizardStep0">Continue to Step 3</button></div>
-    </div>
-
-    <!-- STEP 3 -->
-    <div class="wizard-step" data-wstep="1">
-      <div class="step-title">STEP 3 &mdash; Horn installation</div>
-      <p class="step-body">
-        Enter the logical angle where you'd like to install the servo horn. This is your <strong>best
-        estimate</strong> for now &mdash; it doesn't need to be exact, you'll fine-tune it in Step 5.
-        A common choice is your logical range's center (prefilled below).
-      </p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Install angle (deg, logical)</label>
-          <input type="number" id="inInstallDeg" value="90" />
+        <div class="btn-row">
+          <button class="primary" id="btn-connect">Connect&hellip;</button>
+          <button id="btn-disconnect" disabled>Disconnect</button>
         </div>
-      </div>
-      <div class="btn-row">
-        <button id="btnMoveToInstall">Move servo there</button>
-      </div>
-      <p class="step-body">Install the horn so your mechanism/linkage is positioned the way you want <em>at
-        this angle</em>. When ready, continue.</p>
-      <div class="btn-row"><button class="primary" id="btnWizardStep1">Continue to Step 4</button></div>
-    </div>
+        <div class="log-box" id="log"></div>
+      </section>
 
-    <!-- STEP 4 -->
-    <div class="wizard-step" data-wstep="2">
-      <div class="step-title">STEP 4 &mdash; Direction test</div>
-      <p class="step-body">
-        The servo will move a small step away from where you just installed the horn. Watch which way your
-        <strong>output</strong> (the horn/linkage) actually moves.
-      </p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Test step size (deg)</label>
-          <input type="number" id="inDirTestStep" value="15" />
+      <section class="card disabled" id="card-calibration">
+        <div class="card-head">
+          <div class="card-title">Calibration</div>
+          <span class="pill status-off" id="pill-cal"><span class="pill-dot"></span><span id="pill-cal-text">Not calibrated</span></span>
         </div>
-      </div>
-      <div class="btn-row"><button id="btnRunDirTest">Run direction test</button></div>
-      <div class="btn-row" id="dirTestAnswer" style="display:none;">
-        <span class="step-body" style="margin:0;">Did it move in the direction <strong>you</strong> consider positive?</span>
-        <button id="btnDirYes">Yes, that's positive</button>
-        <button id="btnDirNo">No, flip it</button>
-      </div>
-      <div class="readout-value" id="dirResult" style="font-size:12.5px;"></div>
-    </div>
+        <div class="card-desc">
+          Stall-scans outward from center in both directions to find the real safe pulse range (no hand-measuring),
+          then sweeps it twice to build a direction-averaged 20-point table. Takes 1&ndash;3 minutes; progress
+          streams into the log above.
+        </div>
+        <button class="primary full" id="btn-calibrate">Calibrate</button>
+        <div class="cal-summary" id="cal-summary">&mdash;</div>
+        <div class="btn-row">
+          <button id="btn-export" disabled>Export table&hellip;</button>
+          <label class="filebtn" id="btn-import-label"><input type="file" id="file-import" accept="application/json" />Import table&hellip;</label>
+        </div>
+      </section>
 
-    <!-- STEP 5 -->
-    <div class="wizard-step" data-wstep="3">
-      <div class="step-title">STEP 5 &mdash; Fine trim (optional)</div>
-      <p class="step-body">
-        Align precisely now using whatever reference you're using &mdash; witness marks, a pin-drop hole, a
-        mechanical hard stop, etc. Step the servo in small increments (in your chosen positive direction with
-        <strong>+</strong>, the other way with <strong>&minus;</strong>) until it's exactly where the angle
-        below should be. Skip this and the calibration offset stays 0 &mdash; same as skipping fine trim in
-        <code class="mono">RCServoCalibration.ino</code>.
-      </p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Angle this position should represent (deg, logical)</label>
-          <input type="number" id="inTrimTargetDeg" value="90" />
+      <section class="card disabled" id="card-controls">
+        <div class="card-head">
+          <div class="card-title">Command</div>
+          <span class="pill status-off" id="pill-mode"><span class="pill-dot"></span><span id="pill-mode-text">Idle</span></span>
         </div>
-        <div class="field">
-          <label>Trim step size (deg)</label>
-          <input type="number" id="inTrimStep" value="1" />
-        </div>
-      </div>
-      <div class="trim-controls">
-        <button class="trim-step-btn" id="btnTrimMinus">&minus;</button>
-        <button class="trim-step-btn" id="btnTrimPlus">+</button>
-        <div class="readout"><div class="readout-label">Pulse</div><div class="readout-value" id="trimPulse">&mdash;</div></div>
-        <div class="readout"><div class="readout-label">Encoder angle</div><div class="readout-value" id="trimAngle">&mdash;</div></div>
-      </div>
-      <div class="btn-row">
-        <button id="btnTrimSkip">Skip trim</button>
-        <button class="primary" id="btnTrimConfirm">Confirm alignment</button>
-      </div>
-    </div>
 
-    <!-- STEP 6 -->
-    <div class="wizard-step" data-wstep="4">
-      <div class="step-title">STEP 6 &mdash; Test drive (optional)</div>
-      <p class="step-body">
-        Type any logical angle and confirm the servo goes where you expect, now that direction and offset are set.
-      </p>
-      <p class="step-body" id="testDriveRangeHint" style="color:var(--text-muted);"></p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Logical angle (deg)</label>
-          <input type="number" id="inTestDriveDeg" value="0" />
-        </div>
-      </div>
-      <div class="btn-row"><button id="btnTestDriveMove">Move</button></div>
-      <div class="readout-row">
-        <div class="readout"><div class="readout-label">Commanded pulse</div><div class="readout-value" id="testDrivePulse">&mdash;</div></div>
-        <div class="readout"><div class="readout-label">Encoder angle (logical)</div><div class="readout-value" id="testDriveAngle">&mdash;</div></div>
-      </div>
-      <div class="btn-row"><button class="primary" id="btnWizardStep4">Continue to final constructor</button></div>
-    </div>
-
-    <!-- STEP 7 -->
-    <div class="wizard-step" data-wstep="5">
-      <div class="step-title">STEP 7 &mdash; Final constructor</div>
-      <p class="step-body">Ready to paste into your project.</p>
-      <div class="form-grid">
-        <div class="field">
-          <label>Driver type</label>
-          <div class="radio-row">
-            <label class="radio-opt"><input type="radio" name="driverType" value="rcservo" checked /> RCServoMotorDriver</label>
-            <label class="radio-opt"><input type="radio" name="driverType" value="pca9685" /> PCA9685MotorDriver</label>
+        <div class="model-row">
+          <span class="model-label">Calibration model <span class="hint">&mdash; switches live, mid-motion, without touching the setpoint</span></span>
+          <div class="tab-row">
+            <button class="tab-btn model-btn" id="model-btn-linear" data-model="LINEAR" style="--m-color: var(--up)">Linear (2-pt)</button>
+            <button class="tab-btn model-btn" id="model-btn-table" data-model="TABLE" style="--m-color: var(--ref)">Table (20-pt)</button>
           </div>
         </div>
-      </div>
-      <pre class="code-block" id="constructorCode"></pre>
-      <div class="btn-row">
-        <button class="primary" id="btnCopyConstructor">Copy code</button>
-        <button id="btnDownloadConstructor">Download constructor.h</button>
-        <button id="btnDownloadCsvCal">Download calibration_data.csv</button>
-        <button id="btnDownloadCsvHyst">Download hysteresis_data.csv</button>
-        <button id="btnDownloadReport">Download report.html</button>
-      </div>
-    </div>
-  </section>
 
-  <footer>Runs entirely in this browser tab &mdash; nothing is sent anywhere except over the USB serial connection to your board.</footer>
+        <div class="tab-row">
+          <button class="tab-btn active" id="tab-btn-step" data-tab="step">Step</button>
+          <button class="tab-btn" id="tab-btn-square" data-tab="square">Square</button>
+          <button class="tab-btn" id="tab-btn-sine" data-tab="sine">Sine</button>
+        </div>
+
+        <div class="tab-panel active" id="tab-panel-step">
+          <div class="form-grid">
+            <div class="field">
+              <label for="in-target">Target (deg)</label>
+              <input type="number" id="in-target" step="0.1" value="90" />
+            </div>
+            <div class="field">
+              <label for="in-vmax">v<sub>max</sub> (deg/s)</label>
+              <input type="number" id="in-vmax" step="1" min="0.1" value="60" />
+            </div>
+            <div class="field">
+              <label for="in-amax">a<sub>max</sub> (deg/s&sup2;)</label>
+              <input type="number" id="in-amax" step="1" min="0.1" value="120" />
+            </div>
+            <div class="field"><span class="hint" id="target-hint">connect and calibrate first</span></div>
+          </div>
+          <button class="primary full" id="btn-go">Go</button>
+        </div>
+
+        <div class="tab-panel" id="tab-panel-square">
+          <div class="form-grid">
+            <div class="field">
+              <label for="in-sq-low">Low (deg)</label>
+              <input type="number" id="in-sq-low" step="0.1" value="40" />
+            </div>
+            <div class="field">
+              <label for="in-sq-high">High (deg)</label>
+              <input type="number" id="in-sq-high" step="0.1" value="150" />
+            </div>
+            <div class="field">
+              <label for="in-sq-period">Period (s)</label>
+              <input type="number" id="in-sq-period" step="0.1" min="0.1" max="60" value="3" />
+            </div>
+            <div class="field">
+              <label for="in-sq-vmax">v<sub>max</sub> (deg/s)</label>
+              <input type="number" id="in-sq-vmax" step="1" min="0.1" value="60" />
+            </div>
+            <div class="field">
+              <label for="in-sq-amax">a<sub>max</sub> (deg/s&sup2;)</label>
+              <input type="number" id="in-sq-amax" step="1" min="0.1" value="120" />
+            </div>
+            <div class="field"><span class="hint">Toggles low&harr;high every period/2s. Every edge is a real TrapezoidalProfile move.</span></div>
+          </div>
+          <button class="primary full" id="btn-square">Start square wave</button>
+        </div>
+
+        <div class="tab-panel" id="tab-panel-sine">
+          <div class="form-grid">
+            <div class="field">
+              <label for="in-sin-center">Center (deg)</label>
+              <input type="number" id="in-sin-center" step="0.1" value="90" />
+            </div>
+            <div class="field">
+              <label for="in-sin-amp">Amplitude (deg)</label>
+              <input type="number" id="in-sin-amp" step="0.1" min="0.1" value="30" />
+            </div>
+            <div class="field">
+              <label for="in-sin-freq">Frequency (Hz)</label>
+              <input type="number" id="in-sin-freq" step="0.1" min="0.01" max="5" value="0.5" />
+            </div>
+            <div class="field"><span class="hint" id="sine-hint">Center&plusmn;amplitude must fit in range. No v/a limit -- amplitude&times;2&pi;&times;freq is the effective peak speed. Eases in with one normal move to center first.</span></div>
+          </div>
+          <button class="primary full" id="btn-sine">Start sine wave</button>
+        </div>
+
+        <button class="danger full" id="btn-stop">Stop</button>
+
+        <div class="readout-row">
+          <div class="readout"><span class="readout-label">Setpoint</span><span class="readout-value" id="ro-setpoint" style="color:var(--down)">&mdash;</span></div>
+          <div class="readout"><span class="readout-label">Actual</span><span class="readout-value" id="ro-actual" style="color:var(--up)">&mdash;</span></div>
+          <div class="readout"><span class="readout-label">Error</span><span class="readout-value" id="ro-error">&mdash;</span></div>
+        </div>
+      </section>
+
+    </div>
+
+    <div class="right-col">
+      <section class="card disabled" id="card-charts">
+        <div class="card-head">
+          <div class="card-title">Live trace (last <span id="window-sec">8</span>s, auto-scaled)</div>
+        </div>
+        <div class="charts">
+          <div class="chart-block">
+            <div class="chart-title-row">
+              <span class="chart-title">Position (deg)</span>
+              <span class="legend">
+                <span class="item"><span class="swatch" style="background:var(--down)"></span>setpoint</span>
+                <span class="item"><span class="swatch" style="background:var(--up)"></span>actual (AS5600)</span>
+              </span>
+            </div>
+            <div class="chart-wrap" id="wrap-pos"></div>
+          </div>
+          <div class="chart-block">
+            <div class="chart-title-row">
+              <span class="chart-title">Velocity (deg/s)</span>
+              <span class="legend">
+                <span class="item"><span class="swatch" style="background:var(--down)"></span>setpoint</span>
+                <span class="item"><span class="swatch" style="background:var(--up)"></span>actual (differentiated)</span>
+              </span>
+            </div>
+            <div class="chart-wrap" id="wrap-vel"></div>
+          </div>
+          <div class="chart-block">
+            <div class="chart-title-row">
+              <span class="chart-title">Position error, actual &minus; setpoint (deg) &mdash; colored by which model was live</span>
+              <span class="legend">
+                <span class="item"><span class="swatch" style="background:var(--up)"></span>linear (2-pt)</span>
+                <span class="item"><span class="swatch" style="background:var(--ref)"></span>table (20-pt)</span>
+              </span>
+            </div>
+            <div class="chart-title-row">
+              <span class="mono" id="model-stats" style="font-size:11px; color:var(--text-muted);">&mdash;</span>
+            </div>
+            <div class="chart-wrap" id="wrap-err"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -609,7 +386,7 @@ class SerialLink {
     this.lineQueue = [];
     this.lineWaiters = [];
     this.onLog = null;
-    this._readLoopPromise = null;
+    this.onTelemetry = null;
   }
 
   async connect() {
@@ -640,24 +417,16 @@ class SerialLink {
   }
 
   _onLine(line) {
-    if (line.startsWith("#")) {
-      this.onLog && this.onLog(line);
-      return;
-    }
+    if (line.startsWith("#")) { this.onLog && this.onLog(line); return; }
+    if (line.startsWith("T,")) { this.onTelemetry && this.onTelemetry(line); return; }
     this.onLog && this.onLog("< " + line);
-    if (this.lineWaiters.length > 0) {
-      this.lineWaiters.shift()(line);
-    } else {
-      this.lineQueue.push(line);
-    }
+    if (this.lineWaiters.length > 0) this.lineWaiters.shift()(line);
+    else this.lineQueue.push(line);
   }
 
   waitLine(timeoutMs = 3000) {
     return new Promise((resolve, reject) => {
-      if (this.lineQueue.length > 0) {
-        resolve(this.lineQueue.shift());
-        return;
-      }
+      if (this.lineQueue.length > 0) { resolve(this.lineQueue.shift()); return; }
       let done = false;
       const timer = setTimeout(() => {
         if (done) return;
@@ -693,630 +462,309 @@ class SerialLink {
 }
 
 const link = new SerialLink();
-link.onLog = (line) => appendLog(line);
+const el = (id) => document.getElementById(id);
 
 function appendLog(line) {
-  const box = document.getElementById("log");
+  const box = el("log");
   box.textContent += line + "\n";
   box.scrollTop = box.scrollHeight;
 }
+link.onLog = (line) => appendLog(line);
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-const el = (id) => document.getElementById(id);
-
-/* ============================================================
-   Protocol helpers
-   ============================================================ */
-// Every command routes through here first so a stale/never-made connection
-// (e.g. the page was reloaded and never reconnected, or a loaded range file
-// let the UI get ahead of an actual connection) fails with a clear message
-// instead of a cryptic "Cannot read properties of null" from a dead writer.
 function requireConnected() {
-  if (!link.port || !link.writer) {
-    throw new Error("Not connected to the board -- click Connect at the top of the page first.");
-  }
+  if (!link.port || !link.writer) throw new Error("Not connected -- click Connect first.");
 }
 
-async function cmdMove(us) {
-  requireConnected();
-  const resp = await link.sendCommand(`MOVE ${Math.round(us)}`);
-  if (!resp.startsWith("OK")) throw new Error("MOVE failed: " + resp);
-}
-
-// Friendly explanations for the encoder's magnet-status codes (see the
-// firmware's protocol comment / AS5600EncoderDriver::magnetStatusCode()).
-// Matters most once the servo is installed in its real application, where
-// the magnet/sensor air gap may no longer match the bench setup used to
-// calibrate it -- a garbage angle reading should say *why*, not just fail.
-const MAGNET_STATUS_INFO = {
-  OK:             { label: "OK", detail: "" },
-  NO_MAGNET:      { label: "No magnet detected", detail: "Is a magnet actually mounted on the shaft, and is the AS5600 close enough to see it?" },
-  TOO_WEAK:       { label: "Magnetic field too weak", detail: "Magnet is too far from the sensor, or off-axis — move it closer or re-check alignment." },
-  TOO_STRONG:     { label: "Magnetic field too strong", detail: "Magnet is too close to the sensor — move it slightly further away." },
-  NOT_RESPONDING: { label: "AS5600 not responding", detail: "I2C communication with the encoder chip is failing — check wiring/power to the encoder." },
-};
-function describeMagnetStatus(code) {
-  return MAGNET_STATUS_INFO[code] || { label: code || "unknown", detail: "" };
-}
-
-async function cmdRead() {
-  requireConnected();
-  const resp = await link.sendCommand("READ");
-  // Third token (status) is optional in the match so a stale/older firmware
-  // build (pre-magnet-status) still parses -- falls back to a synthesized
-  // OK/NO_MAGNET from the plain valid flag alone in that case.
-  const m = resp.match(/^DATA ([-\d.]+) (\d)(?: (\S+))?$/);
-  if (!m) throw new Error("Bad READ response: " + resp);
-  const valid = m[2] === "1";
-  const status = m[3] || (valid ? "OK" : "NO_MAGNET");
-  return { angle: parseFloat(m[1]), valid, status };
-}
-
-async function cmdZero(deg) {
-  requireConnected();
-  const resp = await link.sendCommand(`ZERO ${deg}`);
-  if (!resp.startsWith("OK")) throw new Error("ZERO failed: " + resp);
-}
-
-async function moveSettled(us, opts = {}) {
-  const pollMs = opts.pollMs ?? 25;
-  const thresholdDeg = opts.thresholdDeg ?? 0.15;
-  const stableCount = opts.stableCount ?? 4;
-  const timeoutMs = opts.timeoutMs ?? 2000;
-  const maxBadStreak = opts.maxBadStreak ?? 8; // ~200ms of bad readings at default pollMs
-
-  await cmdMove(us);
-  let first = await cmdRead();
-  let prev = first.angle;
-  let badStreak = first.status === "OK" ? 0 : 1;
-  await sleep(pollMs);
-  let stable = 0;
-  const start = performance.now();
-  while (performance.now() - start < timeoutMs) {
-    const { angle, status } = await cmdRead();
-    if (status === "OK") {
-      badStreak = 0;
-    } else {
-      badStreak++;
-      // A frozen/garbage reading can look "stable" by pure coincidence --
-      // don't let that pass as settled. Same reasoning as the discarded
-      // Servo_Auto_Calibrator run early this project: an impossible-looking
-      // result usually means bad data, not a real measurement.
-      if (badStreak >= maxBadStreak) {
-        const info = describeMagnetStatus(status);
-        throw new Error(`Encoder reading unreliable while settling at ${Math.round(us)}µs: ${info.label}. ${info.detail}`);
+// Resolves true once a "# READY" boot-banner line is seen (or false on
+// timeout) -- opening the serial port resets a Nano via DTR, same as any
+// other serial terminal, so commands sent before the board reboots and
+// reaches setup()'s banner would otherwise be lost.
+function waitForReadyBanner(timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const prevOnLog = link.onLog;
+    const timer = setTimeout(() => { link.onLog = prevOnLog; resolve(false); }, timeoutMs);
+    link.onLog = (line) => {
+      prevOnLog(line);
+      if (/^# READY/.test(line)) {
+        clearTimeout(timer);
+        link.onLog = prevOnLog;
+        resolve(true);
       }
-    }
-    if (Math.abs(angle - prev) < thresholdDeg) {
-      stable++;
-      if (stable >= stableCount) return angle;
-    } else {
-      stable = 0;
-    }
-    prev = angle;
-    await sleep(pollMs);
-  }
-  return prev;
-}
-
-/* ============================================================
-   UI wiring: connect / configure / manual
-   ============================================================ */
-if (!("serial" in navigator)) {
-  el("browserWarning").style.display = "block";
-}
-
-function setStepDone(n) { el("step" + n).classList.add("done"); el("step" + n).textContent = "✓"; }
-function enableCard(id) { el(id).classList.remove("disabled"); }
-
-function sanitizeIdentifier(name) {
-  let s = (name || "").trim().replace(/[^a-zA-Z0-9_]/g, "_");
-  if (!s || /^[0-9]/.test(s)) s = "servo_" + s;
-  return s || "servo";
-}
-function getServoName() { return sanitizeIdentifier(el("inServoName").value); }
-
-let configApplied = false;
-
-// Shared by the main "Apply configuration" button and the convenience
-// button inside the wizard card -- one code path, so both stay in sync
-// and neither can silently apply different settings than the other.
-async function applyConfiguration() {
-  const encResp = await link.sendCommand("CONFIG ENCODER AS5600");
-  if (!encResp.startsWith("OK")) throw new Error("Encoder config failed: " + encResp);
-
-  const motorType = document.querySelector('input[name="motorType"]:checked').value;
-  let motorResp;
-  if (motorType === "servo") {
-    const pin = el("inPin").value, min = el("inAttachMin").value, max = el("inAttachMax").value;
-    motorResp = await link.sendCommand(`CONFIG SERVO ${pin} ${min} ${max}`);
-  } else {
-    const addr = el("inPcaAddr").value, ch = el("inPcaChannel").value, hz = el("inPcaFreq").value;
-    motorResp = await link.sendCommand(`CONFIG PCA9685 ${addr} ${ch} ${hz}`);
-  }
-  if (!motorResp.startsWith("OK")) throw new Error("Motor config failed: " + motorResp);
-
-  configApplied = true;
-  el("cfgPill").className = "pill status-good";
-  el("cfgPill").innerHTML = '<span class="pill-dot"></span>Configured';
-  setStepDone(2);
-  enableCard("card-manual");
-  enableCard("card-sweep");
-  updateWizardAvailability();
-}
-
-function describeCurrentConfig() {
-  const motorType = document.querySelector('input[name="motorType"]:checked').value;
-  return motorType === "servo"
-    ? `RC servo on pin ${el("inPin").value} (attach range ${el("inAttachMin").value}–${el("inAttachMax").value}µs)`
-    : `PCA9685 channel ${el("inPcaChannel").value} at 0x${el("inPcaAddr").value}, ${el("inPcaFreq").value}Hz`;
-}
-
-// The wizard only truly *requires* range data to exist -- connection and
-// configuration are both fixable from right here (see wizardConnWarning /
-// wizardConfigWarning below), so the card itself only locks when there's
-// no range data at all. If it also locked on connect/config state, the
-// fix-it controls inside it would be unreachable too (.disabled sets
-// pointer-events:none on the whole section) -- that was the bug: gating
-// the whole card meant there was no way to configure *from inside it*.
-function updateWizardAvailability() {
-  const hasRangeData = !!sweepResults;
-  el("card-wizard").classList.toggle("disabled", !hasRangeData);
-  if (!hasRangeData) return;
-
-  const connected = !!(link.port && link.writer);
-  el("wizardConnWarning").style.display = connected ? "none" : "block";
-  el("wizardConfigWarning").style.display = (connected && !configApplied) ? "block" : "none";
-  if (connected && !configApplied) {
-    el("wizardConfigSummary").textContent =
-      "Not configured yet in this session. Will apply: " + describeCurrentConfig() +
-      " (change that in “Configure hardware” above first if it's wrong) — or apply as-is:";
-  }
-}
-
-el("btnConnect").addEventListener("click", async () => {
-  try {
-    await link.connect();
-    el("connPill").className = "pill status-good";
-    el("connPill").innerHTML = '<span class="pill-dot"></span>Connected';
-    el("btnConnect").disabled = true;
-    el("btnDisconnect").disabled = false;
-    el("btnPing").disabled = false;
-    setStepDone(1);
-    enableCard("card-config");
-    updateWizardAvailability();
-  } catch (err) {
-    appendLog("# connect failed: " + err.message);
-  }
-});
-
-el("btnDisconnect").addEventListener("click", async () => {
-  await link.disconnect();
-  configApplied = false; // a fresh connect may hit a freshly-reset board -- always reconfigure
-  zeroAnchored = false;  // ditto for the encoder's zero reference
-  zeroDriftCorrectionDeg = 0;
-  el("connPill").className = "pill status-off";
-  el("connPill").innerHTML = '<span class="pill-dot"></span>Disconnected';
-  el("cfgPill").className = "pill status-off";
-  el("cfgPill").innerHTML = '<span class="pill-dot"></span>Not configured';
-  el("btnConnect").disabled = false;
-  el("btnDisconnect").disabled = true;
-  el("btnPing").disabled = true;
-  updateWizardAvailability();
-});
-
-el("btnPing").addEventListener("click", async () => {
-  try {
-    const resp = await link.sendCommand("PING");
-    appendLog("# ping: " + resp);
-  } catch (err) {
-    appendLog("# ping failed: " + err.message);
-  }
-});
-
-document.querySelectorAll('input[name="motorType"]').forEach(r => {
-  r.addEventListener("change", () => {
-    const isServo = document.querySelector('input[name="motorType"]:checked').value === "servo";
-    el("servoFields").style.display = isServo ? "grid" : "none";
-    el("pcaFields").style.display = isServo ? "none" : "grid";
+    };
   });
-});
-
-el("btnApplyConfig").addEventListener("click", async () => {
-  try {
-    await applyConfiguration();
-  } catch (err) {
-    configApplied = false;
-    el("cfgPill").className = "pill status-crit";
-    el("cfgPill").innerHTML = '<span class="pill-dot"></span>' + err.message;
-    appendLog("# config failed: " + err.message);
-    updateWizardAvailability();
-  }
-});
-
-el("btnApplyConfigWizard").addEventListener("click", async () => {
-  clearWizardError();
-  try {
-    await applyConfiguration();
-  } catch (err) {
-    configApplied = false;
-    showWizardError("Config failed: " + err.message);
-  }
-});
-
-el("btnManualMove").addEventListener("click", async () => {
-  try { await cmdMove(el("inManualUs").value); } catch (err) { appendLog("# " + err.message); }
-});
-el("btnManualRead").addEventListener("click", async () => {
-  try {
-    const { angle, valid, status } = await cmdRead();
-    const info = describeMagnetStatus(status);
-    el("manualAngle").textContent = angle.toFixed(3) + "°";
-    el("manualValid").textContent = info.label;
-    el("manualValid").style.color = valid ? "" : "var(--crit)";
-    const detailBox = el("manualStatusDetail");
-    if (!valid && info.detail) {
-      detailBox.textContent = info.detail;
-      detailBox.style.display = "block";
-    } else {
-      detailBox.style.display = "none";
-    }
-    setStepDone(3);
-  } catch (err) { appendLog("# " + err.message); }
-});
+}
 
 /* ============================================================
-   Range finder
+   Tabs
    ============================================================ */
-const liveData = { down: [], up: [], hystUp: [], hystDown: [] };
-let sweepResults = null;
-let aborted = false;
+const TABS = ["step", "square", "sine"];
+function showTab(name) {
+  TABS.forEach(t => {
+    el(`tab-btn-${t}`).classList.toggle("active", t === name);
+    el(`tab-panel-${t}`).classList.toggle("active", t === name);
+  });
+}
+TABS.forEach(t => el(`tab-btn-${t}`).onclick = () => showTab(t));
 
-function setPhase(text) { el("phaseLabel").textContent = text; }
-function setProgress(frac) { el("progressFill").style.width = Math.max(0, Math.min(1, frac)) * 100 + "%"; }
-
-// Shared consecutive-bad-reading guard, used by the hysteresis loop (which
-// isn't a scanDirection() call -- it's a plain fixed-range walk with no
-// stall detection to piggyback the check onto).
-function makeBadStreakGuard(maxBadStreak = 10) {
-  let streak = 0;
-  return function check(status, contextLabel) {
-    if (status === "OK") { streak = 0; return; }
-    streak++;
-    if (streak >= maxBadStreak) {
-      const info = describeMagnetStatus(status);
-      throw new Error(`Lost a reliable encoder reading ${maxBadStreak} samples in a row${contextLabel ? " " + contextLabel : ""}: ${info.label}. ${info.detail}`);
-    }
+/* ============================================================
+   Calibration model toggle (Linear 2-pt vs. Table 20-pt) -- switches
+   live via MODEL, independent of which Step/Square/Sine tab is showing
+   and without touching the current setpoint/motion at all.
+   ============================================================ */
+["LINEAR", "TABLE"].forEach(m => {
+  el(`model-btn-${m.toLowerCase()}`).onclick = async () => {
+    try {
+      requireConnected();
+      const resp = await link.sendCommand(`MODEL ${m}`);
+      if (!resp.startsWith("OK")) throw new Error("MODEL rejected: " + resp);
+    } catch (e) { appendLog("# " + e.message); }
   };
+});
+let currentModel = null;
+function setModelButtons(model) {
+  if (model === currentModel) return;
+  currentModel = model;
+  el("model-btn-linear").classList.toggle("active", model === "LINEAR");
+  el("model-btn-table").classList.toggle("active", model === "TABLE");
 }
 
-async function scanDirection(startUs, stepUs, hardLimitUs, opts, onSample) {
-  const STALL_WINDOW = 20, STALL_THRESHOLD_DEG = 0.5;
-  // Consecutive non-OK reads before aborting -- mirrors the original
-  // on-device endpoint-finder's MAX_INVALID_STREAK. Without this, a
-  // sustained bad-magnet condition (frozen or garbage angle) could get fed
-  // straight into stall detection and silently produce a wrong endpoint --
-  // "invalid" was only ever tallied for the after-the-fact stats, never
-  // checked live, until now.
-  const MAX_BAD_STREAK = 10;
-  const buf = [];
-  let us = startUs;
-  let badStreak = 0;
-  while (true) {
-    if (aborted) throw new Error("aborted");
-    us += stepUs;
-    let clamped = false;
-    if (stepUs < 0 && us <= hardLimitUs) { us = hardLimitUs; clamped = true; }
-    if (stepUs > 0 && us >= hardLimitUs) { us = hardLimitUs; clamped = true; }
+/* ============================================================
+   Calibration: run / export / import. Wire format for CALRESULT and
+   IMPORT is deliberately identical (maxAngleDeg minPulseUs maxPulseUs
+   <pulse cdeg>x20), so a saved export can be replayed as an IMPORT verbatim.
+   ============================================================ */
+let calibration = null; // { maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}] }
+let maxAngleDeg = null;
 
-    await cmdMove(us);
-    await sleep(opts.stepDelayMs);
-    const { angle, valid, status } = await cmdRead();
-    onSample(us, angle, valid, status);
-
-    if (status === "OK") {
-      badStreak = 0;
-    } else {
-      badStreak++;
-      if (badStreak >= MAX_BAD_STREAK) {
-        const info = describeMagnetStatus(status);
-        throw new Error(`Lost a reliable encoder reading ${MAX_BAD_STREAK} samples in a row near ${us}µs: ${info.label}. ${info.detail}`);
-      }
-    }
-
-    buf.push({ p: us, a: angle });
-    if (buf.length > STALL_WINDOW) buf.shift();
-    if (buf.length === STALL_WINDOW) {
-      const delta = Math.abs(buf[buf.length - 1].a - buf[0].a);
-      if (delta < STALL_THRESHOLD_DEG) {
-        return { pulseUs: buf[0].p, angleDeg: buf[0].a, hitHardLimit: false };
-      }
-    }
-    if (clamped) {
-      return { pulseUs: us, angleDeg: angle, hitHardLimit: true };
-    }
+function parseCalResult(line) {
+  const parts = line.trim().split(/\s+/);
+  if (parts[0] !== "CALRESULT") throw new Error("Unexpected reply: " + line);
+  const result = { maxAngleDeg: parseFloat(parts[1]), minPulseUs: parseInt(parts[2], 10), maxPulseUs: parseInt(parts[3], 10), points: [] };
+  for (let i = 4; i < parts.length; i += 2) {
+    result.points.push({ pulseUs: parseInt(parts[i], 10), angleCentideg: parseInt(parts[i + 1], 10) });
   }
+  return result;
+}
+function buildImportCommand(cal) {
+  const parts = ["IMPORT", cal.maxAngleDeg, cal.minPulseUs, cal.maxPulseUs];
+  for (const p of cal.points) parts.push(p.pulseUs, p.angleCentideg);
+  return parts.join(" ");
 }
 
-el("btnStartSweep").addEventListener("click", async () => {
-  aborted = false;
-  liveData.down = []; liveData.up = []; liveData.hystUp = []; liveData.hystDown = [];
-  el("btnStartSweep").disabled = true;
-  el("btnAbortSweep").disabled = false;
-  el("postRangeActions").style.display = "none";
-  el("quickStats").style.display = "none";
+function setCalPill(state) {
+  const pill = el("pill-cal"), text = el("pill-cal-text");
+  if (state === "done") { pill.className = "pill status-good"; text.textContent = "Calibrated"; }
+  else if (state === "running") { pill.className = "pill status-warn"; text.textContent = "Calibrating…"; }
+  else { pill.className = "pill status-off"; text.textContent = "Not calibrated"; }
+}
 
-  const opts = { stepDelayMs: parseInt(el("inStepDelay").value, 10) };
-  const centerUs = parseInt(el("inCenterUs").value, 10);
-  const hardMin = parseInt(el("inHardMin").value, 10);
-  const hardMax = parseInt(el("inHardMax").value, 10);
-  const stepUs = parseInt(el("inStepUs").value, 10);
-  const measureHysteresis = el("inMeasureHysteresis").checked;
+function applyCalibration(cal) {
+  calibration = cal;
+  maxAngleDeg = cal.maxAngleDeg;
+  el("cal-summary").textContent =
+    `${cal.minPulseUs}–${cal.maxPulseUs}µs · ${cal.maxAngleDeg.toFixed(2)}° stroke · ${cal.points.length}-point table`;
+  setCalPill("done");
+  el("btn-export").disabled = false;
 
+  el("target-hint").textContent = `0 .. ${maxAngleDeg.toFixed(2)}`;
+  el("in-target").max = maxAngleDeg; el("in-target").min = 0;
+  el("card-controls").classList.remove("disabled");
+  el("card-charts").classList.remove("disabled");
+}
+
+el("btn-calibrate").onclick = async () => {
   try {
-    setPhase("Centering...");
-    await moveSettled(centerUs, {});
-    await cmdZero(0);
-
-    setPhase("Verifying the servo actually moves...");
-    const beforeAngle = (await cmdRead()).angle;
-    const probeUs = centerUs + Math.max(stepUs * 25, 50);
-    await moveSettled(probeUs, {});
-    const afterAngle = (await cmdRead()).angle;
-    await moveSettled(centerUs, {});
-    if (Math.abs(afterAngle - beforeAngle) < 1.0) {
-      throw new Error(
-        `Servo doesn't appear to be moving: commanding ${probeUs}µs vs ${centerUs}µs only changed the ` +
-        `encoder reading by ${(afterAngle - beforeAngle).toFixed(2)}°. Check the pin number (the underlying ` +
-        `digital pin, not a board silkscreen label), servo wiring, and servo power before rerunning -- ` +
-        `the encoder itself is fine (it's giving live readings), this is specifically about whether the ` +
-        `commanded pulse is reaching the servo.`
-      );
-    }
-
-    setPhase("Finding MIN endpoint (stall detection)...");
-    setProgress(0.05);
-    const minResult = await scanDirection(centerUs, -stepUs, hardMin, opts, (us, a, valid, status) => {
-      liveData.down.push({ p: us, a, valid, status });
-      updateLiveChart();
-    });
-
-    await moveSettled(centerUs, {});
-
-    setPhase("Finding MAX endpoint (stall detection)...");
-    setProgress(0.35);
-    const maxResult = await scanDirection(centerUs, stepUs, hardMax, opts, (us, a, valid, status) => {
-      liveData.up.push({ p: us, a, valid, status });
-      updateLiveChart();
-    });
-
-    await moveSettled(centerUs, {});
-
-    if (measureHysteresis) {
-      setPhase("Backlash loop (up)...");
-      setProgress(0.6);
-      const hystMargin = Math.max(Math.round((maxResult.pulseUs - minResult.pulseUs) * 0.05), stepUs * 10);
-      const hystLow = minResult.pulseUs + hystMargin;
-      const hystHigh = maxResult.pulseUs - hystMargin;
-      if (hystHigh > hystLow) {
-        const hystGuard = makeBadStreakGuard();
-        await moveSettled(hystLow, {});
-        for (let p = hystLow; p <= hystHigh; p += stepUs) {
-          if (aborted) throw new Error("aborted");
-          await cmdMove(p);
-          await sleep(opts.stepDelayMs);
-          const { angle, valid, status } = await cmdRead();
-          hystGuard(status, `near ${p}µs (up sweep)`);
-          liveData.hystUp.push({ p, a: angle, valid, status });
-        }
-        setPhase("Backlash loop (down)...");
-        setProgress(0.85);
-        for (let p = hystHigh; p >= hystLow; p -= stepUs) {
-          if (aborted) throw new Error("aborted");
-          await cmdMove(p);
-          await sleep(opts.stepDelayMs);
-          const { angle, valid, status } = await cmdRead();
-          hystGuard(status, `near ${p}µs (down sweep)`);
-          liveData.hystDown.push({ p, a: angle, valid, status });
-        }
-      } else {
-        appendLog("# range too narrow for a backlash loop with this margin -- skipped.");
-      }
-      await moveSettled(centerUs, {});
-    }
-
-    await link.sendCommand("STOP");
-    // STOP calls detachMotor() firmware-side (motorType -> MOTOR_NONE) --
-    // deliberately, so the servo doesn't sit there holding torque once the
-    // sweep is done. But that leaves the *wizard*'s next move with nothing
-    // attached, and this app had no way to notice: configApplied stayed
-    // true (nothing in the app's own state changed), so nothing warned
-    // before every wizard move failed with ERR NOT_CONFIGURED. Found by
-    // actually running the wizard against real hardware right after a real
-    // sweep -- a mock that no-ops CONFIG/STOP can't surface this class of
-    // bug at all. Reusing the existing wizardConfigWarning banner + Apply
-    // configuration button (already built for the connect-without-
-    // configuring case) rather than silently reconfiguring -- same
-    // reasoning as before: after two "silently wrong config" bugs this
-    // session, an explicit one-click confirmation beats an invisible retry.
-    configApplied = false;
-    el("cfgPill").className = "pill status-off";
-    el("cfgPill").innerHTML = '<span class="pill-dot"></span>Not configured (stopped after sweep)';
-
-    setProgress(1);
-    setPhase("Done.");
-    sweepResults = computeResults(minResult, maxResult);
-    onRangeDataReady();
-  } catch (err) {
-    setPhase("Stopped: " + err.message);
-    appendLog("# range finder error: " + err.message);
+    requireConnected();
+    setCalPill("running");
+    el("btn-calibrate").disabled = true;
+    const resp = await link.sendCommand("CALIBRATE", 240000);
+    if (!resp.startsWith("CALRESULT")) throw new Error("Calibration failed: " + resp);
+    applyCalibration(parseCalResult(resp));
+  } catch (e) {
+    appendLog("# " + e.message);
+    setCalPill(calibration ? "done" : "idle");
   } finally {
-    el("btnStartSweep").disabled = false;
-    el("btnAbortSweep").disabled = true;
+    el("btn-calibrate").disabled = false;
   }
-});
+};
 
-el("btnAbortSweep").addEventListener("click", () => { aborted = true; });
+el("btn-export").onclick = () => {
+  if (!calibration) return;
+  const blob = new Blob([JSON.stringify(calibration, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `servo_calibration_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
-/* ============================================================
-   Results computation
-   ============================================================ */
-function computeResults(minResult, maxResult) {
-  const minPulseUs = Math.min(minResult.pulseUs, maxResult.pulseUs);
-  const maxPulseUs = Math.max(minResult.pulseUs, maxResult.pulseUs);
-  const angleAtMin = minResult.pulseUs < maxResult.pulseUs ? minResult.angleDeg : maxResult.angleDeg;
-  const angleAtMax = minResult.pulseUs < maxResult.pulseUs ? maxResult.angleDeg : minResult.angleDeg;
-  const maxAngleDeg = Math.abs(angleAtMax - angleAtMin);
-
-  function linreg(pts) {
-    const n = pts.length;
-    if (n < 2) return null;
-    const sx = pts.reduce((s, r) => s + r.p, 0), sy = pts.reduce((s, r) => s + r.a, 0);
-    const mx = sx / n, my = sy / n;
-    let sxx = 0, sxy = 0, syy = 0;
-    pts.forEach(r => { const dx = r.p - mx, dy = r.a - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; });
-    const slope = sxy / sxx, intercept = my - slope * mx;
-    let ssRes = 0;
-    pts.forEach(r => { const res = r.a - (slope * r.p + intercept); ssRes += res * res; });
-    const r2 = 1 - ssRes / syy;
-    return { slope, intercept, r2, rmse: Math.sqrt(ssRes / n) };
-  }
-  const downFit = linreg(liveData.down);
-  const upFit = linreg(liveData.up);
-
-  const upMap = new Map(liveData.hystUp.map(r => [r.p, r.a]));
-  const backlash = [];
-  liveData.hystDown.forEach(r => {
-    if (upMap.has(r.p)) backlash.push({ p: r.p, b: r.a - upMap.get(r.p) });
-  });
-  let backlashMean = null, backlashMax = null, backlashMin = null;
-  if (backlash.length) {
-    const vals = backlash.map(r => r.b);
-    backlashMean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    backlashMax = Math.max(...vals);
-    backlashMin = Math.min(...vals);
-  }
-
-  const invalidCount = liveData.down.filter(r => !r.valid).length +
-                        liveData.up.filter(r => !r.valid).length +
-                        liveData.hystUp.filter(r => !r.valid).length +
-                        liveData.hystDown.filter(r => !r.valid).length;
-
-  return {
-    minPulseUs, maxPulseUs, angleAtMin, angleAtMax, maxAngleDeg,
-    downFit, upFit, backlash, backlashMean, backlashMax, backlashMin,
-    totalSamples: liveData.down.length + liveData.up.length + liveData.hystUp.length + liveData.hystDown.length,
-    invalidCount,
-  };
-}
-
-// Called once range data exists, whether freshly measured or loaded from a file.
-function onRangeDataReady() {
-  // New dataset (fresh sweep or loaded file) means any previous zero-drift
-  // correction was computed against a now-irrelevant reference -- force a
-  // fresh anchor next time a wizard action runs.
-  zeroAnchored = false;
-  zeroDriftCorrectionDeg = 0;
-
-  const r = sweepResults;
-  const grid = el("quickStats");
-  grid.style.display = "grid";
-  grid.innerHTML = "";
-  [
-    ["Min pulse", r.minPulseUs.toFixed(0) + " µs", r.angleAtMin.toFixed(2) + "°"],
-    ["Max pulse", r.maxPulseUs.toFixed(0) + " µs", r.angleAtMax.toFixed(2) + "°"],
-    ["Total travel", r.maxAngleDeg.toFixed(2) + "°", (r.maxPulseUs - r.minPulseUs) + " µs span"],
-    ["Samples / invalid", r.totalSamples + " / " + r.invalidCount, r.invalidCount === 0 ? "clean run" : "check wiring"],
-  ].forEach(([label, value, sub]) => {
-    const d = document.createElement("div");
-    d.className = "stat";
-    d.innerHTML = `<div class="stat-label"></div><div class="stat-value"></div><div class="stat-sub"></div>`;
-    d.children[0].textContent = label; d.children[1].textContent = value; d.children[2].textContent = sub;
-    grid.appendChild(d);
-  });
-  el("postRangeActions").style.display = "flex";
-
-  setStepDone(4);
-  enableCard("card-results");
-  updateWizardAvailability();
-  renderDiagnostics();
-  seedWizardDefaults();
-}
-
-function renderDiagnostics() {
-  renderCalChart();
-  if (sweepResults.backlash.length) {
-    el("backlashChartBlock").style.display = "";
-    renderBacklashChart();
-  } else {
-    el("backlashChartBlock").style.display = "none";
-  }
-}
-
-/* ============================================================
-   Save / load range-finding session
-   ============================================================ */
-el("btnSaveRange").addEventListener("click", () => {
-  const motorType = document.querySelector('input[name="motorType"]:checked').value;
-  const motorConfig = motorType === "servo"
-    ? { pin: el("inPin").value, attachMin: el("inAttachMin").value, attachMax: el("inAttachMax").value }
-    : { addr: el("inPcaAddr").value, channel: el("inPcaChannel").value, freqHz: el("inPcaFreq").value };
-
-  const session = {
-    kind: "servo-calibrator-range-session",
-    version: 1,
-    servoName: getServoName(),
-    savedAt: new Date().toISOString(),
-    motorType, motorConfig,
-    results: sweepResults,
-    liveData,
-  };
-  downloadText(`${getServoName()}_range.json`, JSON.stringify(session));
-});
-
-el("inLoadRange").addEventListener("change", async (evt) => {
-  const file = evt.target.files[0];
+el("file-import").onchange = async (e) => {
+  const file = e.target.files[0];
   if (!file) return;
   try {
-    const text = await file.text();
-    const session = JSON.parse(text);
-    if (session.kind !== "servo-calibrator-range-session") throw new Error("Not a range-finding session file.");
-
-    el("inServoName").value = session.servoName || "myServo";
-    if (session.motorType === "servo") {
-      document.querySelector('input[name="motorType"][value="servo"]').checked = true;
-      el("servoFields").style.display = "grid"; el("pcaFields").style.display = "none";
-      el("inPin").value = session.motorConfig.pin;
-      el("inAttachMin").value = session.motorConfig.attachMin;
-      el("inAttachMax").value = session.motorConfig.attachMax;
-    } else {
-      document.querySelector('input[name="motorType"][value="pca9685"]').checked = true;
-      el("servoFields").style.display = "none"; el("pcaFields").style.display = "grid";
-      el("inPcaAddr").value = session.motorConfig.addr;
-      el("inPcaChannel").value = session.motorConfig.channel;
-      el("inPcaFreq").value = session.motorConfig.freqHz;
+    requireConnected();
+    const cal = JSON.parse(await file.text());
+    if (!isFinite(cal.maxAngleDeg) || !isFinite(cal.minPulseUs) || !isFinite(cal.maxPulseUs) ||
+        !Array.isArray(cal.points) || cal.points.length !== 20) {
+      throw new Error("Malformed calibration file (expected maxAngleDeg/minPulseUs/maxPulseUs + 20 points).");
     }
-
-    sweepResults = session.results;
-    liveData.down = session.liveData.down || [];
-    liveData.up = session.liveData.up || [];
-    liveData.hystUp = session.liveData.hystUp || [];
-    liveData.hystDown = session.liveData.hystDown || [];
-
-    el("loadStatus").textContent = `Loaded "${session.servoName}" — ${session.results.minPulseUs}–${session.results.maxPulseUs}µs, ${session.results.maxAngleDeg.toFixed(1)}° (saved ${new Date(session.savedAt).toLocaleString()})`;
-    onRangeDataReady();
+    setCalPill("running");
+    const resp = await link.sendCommand(buildImportCommand(cal), 15000);
+    if (!resp.startsWith("OK")) throw new Error("Import rejected: " + resp);
+    applyCalibration(cal);
   } catch (err) {
-    el("loadStatus").textContent = "Load failed: " + err.message;
-    el("loadStatus").style.color = "var(--crit)";
+    appendLog("# import failed: " + err.message);
+    setCalPill(calibration ? "done" : "idle");
+  } finally {
+    e.target.value = "";
   }
-});
-
-el("btnContinueToWizard").addEventListener("click", () => {
-  el("card-wizard").scrollIntoView({ behavior: "smooth", block: "start" });
-});
+};
 
 /* ============================================================
-   Charts (vanilla SVG, redrawn on each update -- cheap at this scale)
+   Connection
+   ============================================================ */
+function setConnectedUI(isConnected) {
+  el("btn-connect").disabled = isConnected;
+  el("btn-disconnect").disabled = !isConnected;
+  const pill = el("pill-conn"), text = el("pill-conn-text");
+  pill.className = "pill " + (isConnected ? "status-good" : "status-off");
+  text.textContent = isConnected ? "Connected" : "Not connected";
+  el("card-calibration").classList.toggle("disabled", !isConnected);
+  if (!isConnected) {
+    el("card-controls").classList.add("disabled");
+    el("card-charts").classList.add("disabled");
+    calibration = null; maxAngleDeg = null;
+    setCalPill("idle");
+    el("btn-export").disabled = true;
+    el("cal-summary").textContent = "—";
+    samples = []; t0ms = null;
+  }
+}
+
+el("btn-connect").onclick = async () => {
+  try {
+    await link.connect();
+    setConnectedUI(true);
+    appendLog("# connected, waiting for board...");
+    const gotReady = await waitForReadyBanner();
+    if (!gotReady) appendLog("# (no ready banner seen in time -- board may already be running; try Calibrate/Import anyway)");
+    // Best-effort recovery of a calibration already on the board (e.g.
+    // reconnecting after a page reload, board itself never reset).
+    try {
+      const resp = await link.sendCommand("GETTABLE", 3000);
+      if (resp.startsWith("CALRESULT")) {
+        applyCalibration(parseCalResult(resp));
+        appendLog("# recovered existing calibration from the board");
+      }
+    } catch (e) { /* not calibrated yet -- fine */ }
+  } catch (e) {
+    appendLog("# connect failed: " + e.message);
+  }
+};
+el("btn-disconnect").onclick = async () => {
+  await link.disconnect();
+  setConnectedUI(false);
+};
+
+/* ============================================================
+   Commands
+   ============================================================ */
+el("btn-go").onclick = async () => {
+  try {
+    requireConnected();
+    const target = parseFloat(el("in-target").value);
+    const vmax = parseFloat(el("in-vmax").value);
+    const amax = parseFloat(el("in-amax").value);
+    if (![target, vmax, amax].every(isFinite)) throw new Error("Fill in target/vmax/amax.");
+    const resp = await link.sendCommand(`GO ${target} ${vmax} ${amax}`);
+    if (!resp.startsWith("OK")) throw new Error("GO rejected: " + resp);
+  } catch (e) { appendLog("# " + e.message); }
+};
+
+el("btn-square").onclick = async () => {
+  try {
+    requireConnected();
+    const lo = parseFloat(el("in-sq-low").value);
+    const hi = parseFloat(el("in-sq-high").value);
+    const period = parseFloat(el("in-sq-period").value);
+    const vmax = parseFloat(el("in-sq-vmax").value);
+    const amax = parseFloat(el("in-sq-amax").value);
+    if (![lo, hi, period, vmax, amax].every(isFinite)) throw new Error("Fill in all square-wave fields.");
+    const resp = await link.sendCommand(`SQUARE ${lo} ${hi} ${period} ${vmax} ${amax}`);
+    if (!resp.startsWith("OK")) throw new Error("SQUARE rejected: " + resp);
+  } catch (e) { appendLog("# " + e.message); }
+};
+
+el("btn-sine").onclick = async () => {
+  try {
+    requireConnected();
+    const center = parseFloat(el("in-sin-center").value);
+    const amp = parseFloat(el("in-sin-amp").value);
+    const freq = parseFloat(el("in-sin-freq").value);
+    if (![center, amp, freq].every(isFinite)) throw new Error("Fill in all sine-wave fields.");
+    const resp = await link.sendCommand(`SINE ${center} ${amp} ${freq}`);
+    if (!resp.startsWith("OK")) throw new Error("SINE rejected: " + resp);
+  } catch (e) { appendLog("# " + e.message); }
+};
+
+el("btn-stop").onclick = async () => {
+  try {
+    requireConnected();
+    const resp = await link.sendCommand("STOP");
+    if (!resp.startsWith("OK")) throw new Error("STOP failed: " + resp);
+  } catch (e) { appendLog("# " + e.message); }
+};
+
+/* ============================================================
+   Telemetry ingestion -- cheap parse + buffer; rendering is decoupled
+   onto a requestAnimationFrame loop below.
+   ============================================================ */
+const WINDOW_SEC = 8;
+const BUFFER_SEC = 15;
+let samples = []; // { t (s), setpointDeg, setpointVel, actualDeg, mode, model }
+let t0ms = null;
+
+const MODE_PILL = {
+  IDLE:   { cls: "status-off",    text: "Idle" },
+  MOVE:   { cls: "status-warn",   text: "Step" },
+  SQUARE: { cls: "status-info",   text: "Square" },
+  SINE:   { cls: "status-accent", text: "Sine" },
+};
+let currentMode = "IDLE";
+function setModePill(mode) {
+  if (mode === currentMode) return;
+  currentMode = mode;
+  const info = MODE_PILL[mode] || MODE_PILL.IDLE;
+  el("pill-mode").className = "pill " + info.cls;
+  el("pill-mode-text").textContent = info.text;
+}
+
+link.onTelemetry = (line) => {
+  // T,<t_ms>,<setpoint_deg>,<setpoint_vel_degs>,<actual_deg>,<mode>,<model>
+  const parts = line.split(",");
+  if (parts.length !== 7) return;
+  const tMs = parseInt(parts[1], 10);
+  const setpointDeg = parseFloat(parts[2]);
+  const setpointVel = parseFloat(parts[3]);
+  const actualDeg = parseFloat(parts[4]);
+  const mode = parts[5];
+  const model = parts[6];
+  if (![tMs, setpointDeg, setpointVel, actualDeg].every(isFinite)) return;
+
+  if (t0ms === null) t0ms = tMs;
+  const t = (tMs - t0ms) / 1000.0;
+
+  samples.push({ t, setpointDeg, setpointVel, actualDeg, mode, model });
+  const cutoff = t - BUFFER_SEC;
+  while (samples.length > 0 && samples[0].t < cutoff) samples.shift();
+
+  setModePill(mode);
+  setModelButtons(model);
+};
+
+/* ============================================================
+   Charts -- rolling time-window SVG line charts, all auto-scaled to
+   the visible window's data.
    ============================================================ */
 const svgNS = "http://www.w3.org/2000/svg";
 function svgEl(tag, attrs) {
@@ -1333,473 +781,138 @@ function niceStep(range, count) {
   return step * mag;
 }
 
-function drawLineChart(container, series, opts) {
-  container.innerHTML = "";
-  const VBW = 1000, VBH = 320;
-  const M = { top: 16, right: 20, bottom: 30, left: 50 };
+function drawRollingChart(container, series, xMax, opts) {
+  const rect = container.getBoundingClientRect();
+  const VBW = Math.max(rect.width, 100), VBH = Math.max(rect.height, 60);
+  const M = { top: 8, right: 10, bottom: 20, left: 44 };
   const plotW = VBW - M.left - M.right, plotH = VBH - M.top - M.bottom;
+  const xMin = xMax - WINDOW_SEC;
 
-  const allP = series.flatMap(s => s.points.map(p => p.p));
-  const allA = series.flatMap(s => s.points.map(p => p.a));
-  if (allP.length < 2) { container.textContent = ""; return; }
-  const xMin = Math.min(...allP), xMax = Math.max(...allP);
-  const yMin0 = Math.min(...allA), yMax0 = Math.max(...allA);
-  const pad = Math.max((yMax0 - yMin0) * 0.08, 0.5);
-  const yMin = yMin0 - pad, yMax = yMax0 + pad;
+  const allY = series.flatMap(s => s.points.map(p => p.y));
+  let lo = allY.length ? Math.min(...allY) : -1;
+  let hi = allY.length ? Math.max(...allY) : 1;
+  if (opts.symmetric) { const m = Math.max(Math.abs(lo), Math.abs(hi), (opts.minSpan || 0) / 2); lo = -m; hi = m; }
+  const span = hi - lo;
+  const pad = Math.max(span * 0.12, opts.minSpan ? opts.minSpan * 0.1 : 0.5);
+  const yMin = lo - pad, yMax = hi + pad;
 
-  function xScale(p) { return M.left + (xMax > xMin ? (p - xMin) / (xMax - xMin) : 0.5) * plotW; }
-  function yScale(v) { return M.top + plotH - (v - yMin) / (yMax - yMin) * plotH; }
+  function xScale(x) { return M.left + ((x - xMin) / (xMax - xMin)) * plotW; }
+  function yScale(y) { return M.top + plotH - ((y - yMin) / (yMax - yMin)) * plotH; }
 
-  const svg = svgEl("svg", { class: "chart", viewBox: `0 0 ${VBW} ${VBH}`, preserveAspectRatio: "xMidYMid meet" });
+  const svg = svgEl("svg", { class: "chart", viewBox: `0 0 ${VBW} ${VBH}`, preserveAspectRatio: "none" });
 
-  const yStep = niceStep(yMax - yMin, 6);
+  const yStep = niceStep(yMax - yMin, 4);
   for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax; v += yStep) {
     const y = yScale(v);
     svg.appendChild(svgEl("line", { class: "grid-line", x1: M.left, x2: M.left + plotW, y1: y, y2: y }));
-    const t = svgEl("text", { class: "tick-label", x: M.left - 8, y: y + 3.5, "text-anchor": "end" });
-    t.textContent = v.toFixed(1) + (opts.yUnit || "");
+    const t = svgEl("text", { class: "tick-label", x: M.left - 6, y: y + 3, "text-anchor": "end" });
+    t.textContent = v.toFixed(Math.abs(v) >= 100 ? 0 : 1) + (opts.yUnit || "");
     svg.appendChild(t);
   }
-  const xStep = niceStep(xMax - xMin, 7);
+  if (opts.zeroLine && yMin < 0 && yMax > 0) {
+    svg.appendChild(svgEl("line", { class: "zero-line", x1: M.left, x2: M.left + plotW, y1: yScale(0), y2: yScale(0) }));
+  }
+  const xStep = niceStep(WINDOW_SEC, 4);
   for (let v = Math.ceil(xMin / xStep) * xStep; v <= xMax; v += xStep) {
     const x = xScale(v);
-    const t = svgEl("text", { class: "tick-label", x, y: M.top + plotH + 18, "text-anchor": "middle" });
-    t.textContent = Math.round(v);
+    const t = svgEl("text", { class: "tick-label", x, y: M.top + plotH + 13, "text-anchor": "middle" });
+    t.textContent = (v - xMax).toFixed(0) + "s";
     svg.appendChild(t);
   }
   svg.appendChild(svgEl("line", { class: "axis-line", x1: M.left, x2: M.left + plotW, y1: M.top + plotH, y2: M.top + plotH }));
 
   series.forEach(s => {
-    const sorted = [...s.points].sort((a, b) => a.p - b.p);
+    if (s.points.length < 2) return;
     let d = "";
-    sorted.forEach((pt, i) => {
-      const x = xScale(pt.p), y = yScale(pt.a);
+    s.points.forEach((pt, i) => {
+      const x = xScale(pt.x), y = yScale(pt.y);
       d += (i === 0 ? "M" : "L") + x.toFixed(2) + "," + y.toFixed(2) + " ";
     });
     svg.appendChild(svgEl("path", { class: "series-path", d, stroke: s.color }));
   });
 
+  container.innerHTML = "";
   container.appendChild(svg);
 }
 
-function updateLiveChart() {
-  drawLineChart(el("wrap-live"), [
-    { points: liveData.down, color: "var(--down)" },
-    { points: liveData.up, color: "var(--up)" },
-  ], { yUnit: "°" });
-}
-function renderCalChart() {
-  drawLineChart(el("wrap-cal"), [
-    { points: liveData.down, color: "var(--down)" },
-    { points: liveData.up, color: "var(--up)" },
-  ], { yUnit: "°" });
-}
-function renderBacklashChart() {
-  const pts = sweepResults.backlash.map(r => ({ p: r.p, a: Math.abs(r.b) }));
-  drawLineChart(el("wrap-backlash"), [{ points: pts, color: "var(--ref)" }], { yUnit: "°" });
-}
-
-/* ============================================================
-   Installation & calibration wizard
-   ============================================================ */
-const DEG2RAD = Math.PI / 180;
-
-const wizard = {
-  logicalZeroShiftDeg: 0,
-  installDeg: 90,
-  direction: 1,
-  calibrationOffsetRad: 0,
-  trimUs: null,
-};
-
-// The firmware's ZERO command sets an offset that lives in the Arduino's
-// RAM (AS5600EncoderDriver's angleOffsetRad_) -- it resets to 0 on ANY
-// board reset (power cycle, reconnect, a firmware re-upload), invisibly to
-// this app. If that happens between range-finding and later wizard use,
-// every live reading is off from sweepResults.angleAtMin by a large,
-// constant amount -- exactly what showed up as "readout offset by ~150°"
-// with an otherwise-correct constructor (the actual servo *movement* never
-// depended on a live reading, only on sweepResults, so positioning was
-// fine the whole time -- this was purely a stale-reference display bug).
-let zeroDriftCorrectionDeg = 0;
-let zeroAnchored = false;
-
-// Re-anchors against a point near the ORIGINAL sweep's center reference
-// (liveData.down[0]/up[0] -- one step off center, never minPulseUs/
-// maxPulseUs) rather than a raw mechanical extreme. Deliberate: by wizard
-// time the servo may be installed in a real mechanism with real physical
-// constraints, so this must not command it toward its bare-servo limits
-// just to check a software reference. Drift is a pure constant offset
-// (the AS5600's zero register shifting by the same amount everywhere), so
-// measuring it near center is exactly as valid as measuring it at an
-// endpoint -- just safer. Idempotent (checks zeroAnchored) so it's cheap
-// to call defensively at the top of every wizard move handler.
-async function ensureZeroAnchored() {
-  if (zeroAnchored) return;
-  const refSample = liveData.down[0] || liveData.up[0];
-  if (!refSample) { zeroAnchored = true; return; } // nothing recorded to anchor against
-  const freshAngle = await moveSettled(refSample.p, {});
-  zeroDriftCorrectionDeg = freshAngle - refSample.a;
-  zeroAnchored = true;
-  if (Math.abs(zeroDriftCorrectionDeg) > 1) {
-    appendLog(`# Re-synced encoder zero reference (drift ${zeroDriftCorrectionDeg.toFixed(1)}°) -- the board's zero state didn't survive since range-finding (reflash / power cycle / reconnect). Constructor values are unaffected -- this only corrects live readouts.`);
+function computeActualVelocities(visible) {
+  const raw = [];
+  for (let i = 1; i < visible.length; i++) {
+    const dt = visible[i].t - visible[i - 1].t;
+    raw.push(dt > 1e-4 ? (visible[i].actualDeg - visible[i - 1].actualDeg) / dt : 0);
   }
-}
-
-function physicalCenterRad() { return sweepResults.maxAngleDeg * DEG2RAD / 2; }
-function logicalCenterRad() { return wizard.logicalZeroShiftDeg * DEG2RAD + physicalCenterRad(); }
-function maxAngleRad() { return sweepResults.maxAngleDeg * DEG2RAD; }
-
-// Forward model: logical angle (deg) -> pulse (us), matching RCServoMotorDriver::setPosition() exactly.
-// NOTE the clamp below is silent by design (matches the deployed driver's
-// own setPosition(), which also clamps rather than erroring) -- callers
-// that need to know a request got clamped (test drive) should check
-// achievableLogicalRange() themselves before calling this, not infer it
-// from the result.
-function logicalDegToPulseUs(logicalDeg) {
-  const qRad = logicalDeg * DEG2RAD;
-  let pRad = physicalCenterRad() + wizard.direction * (qRad - logicalCenterRad()) + wizard.calibrationOffsetRad;
-  pRad = Math.max(0, Math.min(maxAngleRad(), pRad));
-  return sweepResults.minPulseUs + (pRad / maxAngleRad()) * (sweepResults.maxPulseUs - sweepResults.minPulseUs);
-}
-// Inverse of the driver's pulse formula: pulse (us) -> physical radians (its model, not a fresh reading).
-function pulseUsToPhysicalRad(us) {
-  return ((us - sweepResults.minPulseUs) / (sweepResults.maxPulseUs - sweepResults.minPulseUs)) * maxAngleRad();
-}
-
-// The physical range is always [0, maxAngleRad] by construction -- invert
-// both ends through the *current* direction/offset/logical-zero-shift to
-// find which logical angles are actually reachable. Not always
-// [0, travel] or symmetric around 0: a non-zero calibrationOffsetRad (from
-// trim) shifts it, and direction=-1 can reverse which physical end maps to
-// which logical extreme, hence the min/max sort at the end rather than
-// assuming qAtPhysZero < qAtPhysMax.
-function achievableLogicalRange() {
-  const qAtPhysZero = (logicalCenterRad() + wizard.direction * (0 - physicalCenterRad() - wizard.calibrationOffsetRad)) / DEG2RAD;
-  const qAtPhysMax = (logicalCenterRad() + wizard.direction * (maxAngleRad() - physicalCenterRad() - wizard.calibrationOffsetRad)) / DEG2RAD;
-  return { lo: Math.min(qAtPhysZero, qAtPhysMax), hi: Math.max(qAtPhysZero, qAtPhysMax) };
-}
-
-// Full round-trip inverse: a *live* raw AS5600 reading (degrees) -> logical
-// angle (degrees), honoring direction/offset/logical-zero-shift -- used so
-// the test-drive readout (STEP 6) reports back in the same terms the user
-// typed in, not the raw sensor frame. Two frames to reconcile, not one:
-// the AS5600's own zero was set once, at REF_PULSE_US at the start of range
-// finding (ZERO 0) -- it has nothing to do with the driver's physical zero,
-// which is defined at minPulseUs. sweepResults.angleAtMin is the raw AS5600
-// reading recorded *at* minPulseUs during that sweep, so subtracting it is
-// what re-bases a live raw reading onto the driver's own physical frame
-// before running the (pRad -> qRad) inverse of logicalDegToPulseUs()'s math.
-function rawAngleDegToLogicalDeg(rawAngleDeg) {
-  const correctedRaw = rawAngleDeg - zeroDriftCorrectionDeg;
-  const pRad = (correctedRaw - sweepResults.angleAtMin) * DEG2RAD;
-  const qRad = logicalCenterRad() + wizard.direction * (pRad - physicalCenterRad() - wizard.calibrationOffsetRad);
-  return qRad / DEG2RAD;
-}
-
-let currentWizardStep = 0;
-function showWizardStep(n) {
-  currentWizardStep = n;
-  document.querySelectorAll(".wizard-step").forEach(el2 => el2.classList.toggle("active", +el2.dataset.wstep === n));
-  document.querySelectorAll(".wizard-dot").forEach(el2 => {
-    const s = +el2.dataset.wstep;
-    el2.classList.toggle("active", s === n);
-    el2.classList.toggle("done", s < n);
+  return raw.map((_, i) => {
+    const lo = Math.max(0, i - 2);
+    const win = raw.slice(lo, i + 1);
+    return win.reduce((a, b) => a + b, 0) / win.length;
   });
-  if (n === 4) {
-    // Entering test drive -- direction/offset are both final at this point,
-    // so the reachable range is fixed for the rest of this wizard pass.
-    // Surfaced here (not just reactively on a clamp) so it's visible
-    // *before* trying a value, not just after.
-    const range = achievableLogicalRange();
-    el("testDriveRangeHint").textContent =
-      `Reachable logical range with the current direction/offset/logical-zero-shift: ${range.lo.toFixed(1)}° to ${range.hi.toFixed(1)}°. Requests outside this clamp to the nearest end.`;
-  }
 }
 
-function showWizardError(msg) {
-  appendLog("# " + msg);
-  const box = el("wizardError");
-  box.textContent = msg;
-  box.style.display = "block";
-}
-function clearWizardError() {
-  const box = el("wizardError");
-  box.style.display = "none";
-  box.textContent = ""; // not just hidden -- stale text sitting in the DOM
-                         // is confusing to inspect (found while testing)
-}
-
-function seedWizardDefaults() {
-  wizard.logicalZeroShiftDeg = 0;
-  wizard.direction = 1;
-  wizard.calibrationOffsetRad = 0;
-  el("inLogicalShift").value = 0;
-  el("inInstallDeg").value = (sweepResults.maxAngleDeg / 2).toFixed(1);
-  showWizardStep(0);
-}
-
-// --- STEP 2 ---
-el("btnWizardStep0").addEventListener("click", () => {
-  wizard.logicalZeroShiftDeg = parseFloat(el("inLogicalShift").value) || 0;
-  el("inInstallDeg").value = (wizard.logicalZeroShiftDeg + sweepResults.maxAngleDeg / 2).toFixed(1);
-  showWizardStep(1);
-});
-
-// --- STEP 3 ---
-el("btnMoveToInstall").addEventListener("click", async () => {
-  clearWizardError();
-  try {
-    await ensureZeroAnchored();
-    wizard.installDeg = parseFloat(el("inInstallDeg").value) || 0;
-    const us = logicalDegToPulseUs(wizard.installDeg);
-    await moveSettled(us, {});
-  } catch (err) { showWizardError(err.message); }
-});
-el("btnWizardStep1").addEventListener("click", () => {
-  wizard.installDeg = parseFloat(el("inInstallDeg").value) || 0;
-  el("inTrimTargetDeg").value = wizard.installDeg;
-  showWizardStep(2);
-});
-
-// --- STEP 4 ---
-el("btnRunDirTest").addEventListener("click", async () => {
-  clearWizardError();
-  try {
-    await ensureZeroAnchored();
-    const step = parseFloat(el("inDirTestStep").value) || 15;
-    await moveSettled(logicalDegToPulseUs(wizard.installDeg), {});
-    await moveSettled(logicalDegToPulseUs(wizard.installDeg + step), {});
-    el("dirTestAnswer").style.display = "flex";
-  } catch (err) { showWizardError(err.message); }
-});
-// --- STEP 5 (trim) ---
-function enterTrimStep() {
-  wizard.trimUs = logicalDegToPulseUs(wizard.installDeg);
-  el("trimPulse").textContent = Math.round(wizard.trimUs) + " µs";
-  el("trimAngle").textContent = "—";
-  showWizardStep(3);
-}
-
-// Single handler per answer -- sets direction, settles back to the install
-// position, *then* enters the trim step, in that order (was previously two
-// separate listeners relying on registration-order timing; merged for
-// clarity and to remove that fragility).
-async function finishDirTest(positive) {
-  wizard.direction = positive ? 1 : -1;
-  el("dirResult").textContent = "Direction set to " + (wizard.direction > 0 ? "+1" : "-1") + ".";
-  el("dirTestAnswer").style.display = "none";
-  try {
-    await moveSettled(logicalDegToPulseUs(wizard.installDeg), {});
-  } catch (err) {
-    showWizardError(err.message);
-  }
-  enterTrimStep();
-}
-el("btnDirYes").addEventListener("click", () => finishDirTest(true));
-el("btnDirNo").addEventListener("click", () => finishDirTest(false));
-
-// Tracked so btnTrimConfirm can warn if the encoder wasn't reliable on the
-// last step -- the confirm math itself doesn't depend on this reading (it
-// uses the driver's own linear model, not a live angle -- see the
-// pulseUsToPhysicalRad() comment below), but the *human* judging alignment
-// against the live readout deserves to know if that readout was garbage.
-let lastTrimStatus = "OK";
-
-async function trimStep(sign) {
-  clearWizardError();
-  const stepDeg = parseFloat(el("inTrimStep").value) || 1;
-  const stepUs = wizard.direction * sign * (stepDeg * DEG2RAD) / maxAngleRad() * (sweepResults.maxPulseUs - sweepResults.minPulseUs);
-  wizard.trimUs = Math.max(sweepResults.minPulseUs, Math.min(sweepResults.maxPulseUs, wizard.trimUs + stepUs));
-  try {
-    await ensureZeroAnchored();
-    await cmdMove(wizard.trimUs);
-    await sleep(350);
-    const { angle, status } = await cmdRead();
-    lastTrimStatus = status;
-    const info = describeMagnetStatus(status);
-    // Drift-corrected, but still raw (physical) frame, not logical --
-    // calibrationOffsetRad isn't final until Confirm, so a "logical" number
-    // here would be provisional/misleading. Correcting for zero-drift is a
-    // different, orthogonal concern (making the raw number trustworthy at
-    // all) and applies regardless.
-    const correctedAngle = angle - zeroDriftCorrectionDeg;
-    el("trimPulse").textContent = Math.round(wizard.trimUs) + " µs";
-    el("trimAngle").textContent = correctedAngle.toFixed(2) + "°" + (status === "OK" ? "" : "  ⚠ " + info.label);
-    if (status !== "OK") showWizardError("Encoder: " + info.label + ". " + info.detail);
-  } catch (err) { showWizardError(err.message); }
-}
-el("btnTrimPlus").addEventListener("click", () => trimStep(+1));
-el("btnTrimMinus").addEventListener("click", () => trimStep(-1));
-
-el("btnTrimSkip").addEventListener("click", () => {
-  wizard.calibrationOffsetRad = 0;
-  showWizardStep(4);
-});
-el("btnTrimConfirm").addEventListener("click", () => {
-  if (lastTrimStatus !== "OK") {
-    const info = describeMagnetStatus(lastTrimStatus);
-    showWizardError(
-      `Confirming anyway -- but the encoder's live readout during trim wasn't reliable ` +
-      `(${info.label}), so if you were judging alignment by that number rather than your ` +
-      `physical reference, it may be off. The offset itself is still computed correctly from ` +
-      `the pulse width, not the reading.`
-    );
-  }
-  const qDesiredRad = (parseFloat(el("inTrimTargetDeg").value) || 0) * DEG2RAD;
-  const pCurr = pulseUsToPhysicalRad(wizard.trimUs);
-  wizard.calibrationOffsetRad = pCurr - physicalCenterRad() - wizard.direction * (qDesiredRad - logicalCenterRad());
-  showWizardStep(4);
-});
-
-// --- STEP 6 (test drive) ---
-el("btnTestDriveMove").addEventListener("click", async () => {
-  clearWizardError();
-  try {
-    await ensureZeroAnchored();
-    const deg = parseFloat(el("inTestDriveDeg").value) || 0;
-    // Check range BEFORE moving -- logicalDegToPulseUs() clamps silently by
-    // design (matching the deployed driver's own setPosition() behavior),
-    // so this is the only place that knows a request fell outside what's
-    // reachable. Skipping this check is exactly what made an out-of-range
-    // request look like a sign-flip bug: e.g. asking for -90° with a
-    // reachable range of -11°..+190.6° silently lands at the -11° end,
-    // and -11° looks nothing like -90° if you're not expecting a clamp.
-    const range = achievableLogicalRange();
-    const outOfRange = deg < range.lo - 1e-6 || deg > range.hi + 1e-6;
-
-    const us = logicalDegToPulseUs(deg);
-    const rawAngle = await moveSettled(us, {});
-    const { status } = await cmdRead();
-    const info = describeMagnetStatus(status);
-    // rawAngle is the AS5600's own frame -- convert back through direction/
-    // offset/logical-zero-shift so this reads back in the same terms the
-    // angle above was typed in, not the raw sensor frame.
-    const logicalAngle = rawAngleDegToLogicalDeg(rawAngle);
-    el("testDrivePulse").textContent = Math.round(us) + " µs" + (outOfRange ? " (clamped)" : "");
-    el("testDriveAngle").textContent =
-      logicalAngle.toFixed(2) + "° (raw " + rawAngle.toFixed(2) + "°)" +
-      (status === "OK" ? "" : "  ⚠ " + info.label);
-
-    if (outOfRange) {
-      showWizardError(
-        `${deg}° is outside this servo's reachable range (${range.lo.toFixed(1)}° to ${range.hi.toFixed(1)}°) -- ` +
-        `moved to the nearest end instead, which reads back as ${logicalAngle.toFixed(2)}°. This isn't a bug in ` +
-        `the reading, the requested angle just isn't physically reachable with the current direction/offset/` +
-        `logical-zero-shift.`
-      );
-    } else if (status !== "OK") {
-      showWizardError("Encoder: " + info.label + ". " + info.detail);
+const MODEL_COLOR = { LINEAR: "var(--up)", TABLE: "var(--ref)" };
+function splitErrorByModel(visible) {
+  const segments = [];
+  let curModel = null, curPoints = [];
+  for (const s of visible) {
+    const y = s.actualDeg - s.setpointDeg;
+    if (s.model !== curModel) {
+      if (curPoints.length > 1) segments.push({ points: curPoints, color: MODEL_COLOR[curModel] || "var(--ref)" });
+      curModel = s.model;
+      curPoints = curPoints.length ? [{ x: curPoints[curPoints.length - 1].x, y: curPoints[curPoints.length - 1].y }] : [];
     }
-  } catch (err) { showWizardError(err.message); }
-});
-el("btnWizardStep4").addEventListener("click", () => { updateConstructor(); showWizardStep(5); });
-
-/* ============================================================
-   Constructor generation
-   ============================================================ */
-function updateConstructor() {
-  if (!sweepResults) return;
-  const r = sweepResults;
-  const name = getServoName();
-  const driverType = document.querySelector('input[name="driverType"]:checked').value;
-  const maxAngleRadVal = maxAngleRad();
-  const logicalZeroShiftRad = wizard.logicalZeroShiftDeg * DEG2RAD;
-
-  let code;
-  if (driverType === "rcservo") {
-    const pin = el("inPin").value || "PIN";
-    code =
-`RCServoMotorDriver ${name}(
-    ${pin},
-    ${maxAngleRadVal.toFixed(6)}f,   // maxAngleRad
-    ${logicalZeroShiftRad.toFixed(6)}f,   // logicalZeroShiftRad
-    ${r.minPulseUs},
-    ${r.maxPulseUs},
-    ${wizard.calibrationOffsetRad.toFixed(6)}f,   // calibrationOffsetRad
-    ${wizard.direction.toFixed(1)}f    // direction
-);`;
-  } else {
-    const addr = el("inPcaAddr").value || "40";
-    const ch = el("inPcaChannel").value || "0";
-    const hz = el("inPcaFreq").value || "50";
-    code =
-`PCA9685Backend ${name}_pca(Wire, 0x${addr}, ${hz}.0f);
-PCA9685MotorDriver ${name}(
-    ${name}_pca,
-    ${ch},
-    ${maxAngleRadVal.toFixed(6)}f,   // maxAngleRad
-    ${logicalZeroShiftRad.toFixed(6)}f,   // logicalZeroShiftRad
-    ${r.minPulseUs},
-    ${r.maxPulseUs},
-    ${wizard.calibrationOffsetRad.toFixed(6)}f,   // calibrationOffsetRad
-    ${wizard.direction.toFixed(1)}f    // direction
-);`;
+    curPoints.push({ x: s.t, y });
   }
-  el("constructorCode").textContent = code;
-}
-document.querySelectorAll('input[name="driverType"]').forEach(r => r.addEventListener("change", updateConstructor));
-
-el("btnCopyConstructor").addEventListener("click", () => {
-  navigator.clipboard.writeText(el("constructorCode").textContent);
-});
-
-function downloadText(filename, text) {
-  const blob = new Blob([text], { type: "text/plain" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  if (curPoints.length > 1) segments.push({ points: curPoints, color: MODEL_COLOR[curModel] || "var(--ref)" });
+  return segments;
 }
 
-el("btnDownloadConstructor").addEventListener("click", () => {
-  downloadText(`${getServoName()}_constructor.h`, "// Generated by Servo Calibrator\n" + el("constructorCode").textContent + "\n");
-});
-
-// r.status may be absent on data loaded from a session saved before the
-// magnet-status field existed -- fall back to blank rather than "undefined".
-function toCsv(rows) {
-  return "pulse_us,angle_deg,valid,magnet_status\n" +
-    rows.map(r => `${r.p},${r.a.toFixed(4)},${r.valid ? 1 : 0},${r.status || ""}`).join("\n") + "\n";
+function updateModelStats(visible) {
+  const stats = {};
+  for (const s of visible) {
+    const err = Math.abs(s.actualDeg - s.setpointDeg);
+    (stats[s.model] || (stats[s.model] = { sum: 0, n: 0 })).sum += err;
+    if (stats[s.model].n !== undefined) stats[s.model].n++;
+  }
+  const parts = [];
+  if (stats.LINEAR) parts.push(`<span style="color:var(--up)">linear ${(stats.LINEAR.sum / stats.LINEAR.n).toFixed(2)}&deg; avg (n=${stats.LINEAR.n})</span>`);
+  if (stats.TABLE) parts.push(`<span style="color:var(--ref)">table ${(stats.TABLE.sum / stats.TABLE.n).toFixed(2)}&deg; avg (n=${stats.TABLE.n})</span>`);
+  if (stats.LINEAR && stats.TABLE) {
+    const ratio = (stats.LINEAR.sum / stats.LINEAR.n) / (stats.TABLE.sum / stats.TABLE.n);
+    if (isFinite(ratio) && ratio > 1) parts.push(`<span style="color:var(--text-2)">table ${ratio.toFixed(1)}&times; better in this window</span>`);
+  }
+  el("model-stats").innerHTML = parts.join(" &nbsp;&middot;&nbsp; ") || "&mdash;";
 }
-el("btnDownloadCsvCal").addEventListener("click", () => {
-  downloadText(`${getServoName()}_calibration_data.csv`, toCsv([...liveData.down, ...liveData.up]));
-});
-el("btnDownloadCsvHyst").addEventListener("click", () => {
-  const rows = [
-    ...liveData.hystUp.map(r => ({ ...r, dir: "U" })),
-    ...liveData.hystDown.map(r => ({ ...r, dir: "D" })),
-  ];
-  const csv = "direction,pulse_us,angle_deg,valid,magnet_status\n" +
-    rows.map(r => `${r.dir},${r.p},${r.a.toFixed(4)},${r.valid ? 1 : 0},${r.status || ""}`).join("\n") + "\n";
-  downloadText(`${getServoName()}_hysteresis_data.csv`, csv);
-});
-el("btnDownloadReport").addEventListener("click", () => {
-  if (!sweepResults) return;
-  const r = sweepResults;
-  const html = `<!doctype html><meta charset="utf-8"><title>${getServoName()} Calibration Report</title>
-<style>body{font-family:system-ui,sans-serif;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.6;}
-table{border-collapse:collapse;width:100%;margin:16px 0;} td,th{border:1px solid #ccc;padding:6px 10px;text-align:left;}
-pre{background:#f2f1ed;padding:14px;border-radius:4px;overflow-x:auto;}</style>
-<h1>${getServoName()} Calibration Report</h1>
-<p>Generated ${new Date().toISOString()}</p>
-<table>
-<tr><th>Min pulse</th><td>${r.minPulseUs} µs (${r.angleAtMin.toFixed(3)}°)</td></tr>
-<tr><th>Max pulse</th><td>${r.maxPulseUs} µs (${r.angleAtMax.toFixed(3)}°)</td></tr>
-<tr><th>Total travel</th><td>${r.maxAngleDeg.toFixed(3)}°</td></tr>
-<tr><th>Down-sweep fit</th><td>${r.downFit ? "R²=" + r.downFit.r2.toFixed(5) + ", RMSE=" + r.downFit.rmse.toFixed(3) + "°" : "n/a"}</td></tr>
-<tr><th>Up-sweep fit</th><td>${r.upFit ? "R²=" + r.upFit.r2.toFixed(5) + ", RMSE=" + r.upFit.rmse.toFixed(3) + "°" : "n/a"}</td></tr>
-<tr><th>Mean backlash</th><td>${r.backlashMean != null ? Math.abs(r.backlashMean).toFixed(3) + "°" : "n/a"}</td></tr>
-<tr><th>Samples / invalid</th><td>${r.totalSamples} / ${r.invalidCount}</td></tr>
-<tr><th>Direction</th><td>${wizard.direction > 0 ? "+1" : "-1"}</td></tr>
-<tr><th>Logical zero shift</th><td>${wizard.logicalZeroShiftDeg}°</td></tr>
-<tr><th>Calibration offset</th><td>${wizard.calibrationOffsetRad.toFixed(6)} rad</td></tr>
-</table>
-<h2>Generated constructor</h2>
-<pre>${el("constructorCode").textContent.replace(/</g, "&lt;")}</pre>`;
-  downloadText(`${getServoName()}_report.html`, html);
-});
+
+function renderFrame() {
+  requestAnimationFrame(renderFrame);
+  if (samples.length === 0) return;
+
+  const tNow = samples[samples.length - 1].t;
+  const xMin = tNow - WINDOW_SEC;
+  const visible = samples.filter(s => s.t >= xMin - 0.5);
+
+  drawRollingChart(el("wrap-pos"), [
+    { points: visible.map(s => ({ x: s.t, y: s.setpointDeg })), color: "var(--down)" },
+    { points: visible.map(s => ({ x: s.t, y: s.actualDeg })), color: "var(--up)" },
+  ], tNow, { yUnit: "°", minSpan: 5 });
+
+  const actualVel = computeActualVelocities(visible);
+  drawRollingChart(el("wrap-vel"), [
+    { points: visible.map(s => ({ x: s.t, y: s.setpointVel })), color: "var(--down)" },
+    { points: visible.slice(1).map((s, i) => ({ x: s.t, y: actualVel[i] })), color: "var(--up)" },
+  ], tNow, { yUnit: "°/s", minSpan: 5 });
+
+  drawRollingChart(el("wrap-err"), splitErrorByModel(visible), tNow, { yUnit: "°", symmetric: true, minSpan: 1, zeroLine: true });
+  updateModelStats(visible);
+
+  const last = samples[samples.length - 1];
+  el("ro-setpoint").textContent = last.setpointDeg.toFixed(2) + "°";
+  el("ro-actual").textContent = last.actualDeg.toFixed(2) + "°";
+  const err = last.actualDeg - last.setpointDeg;
+  const errEl = el("ro-error");
+  errEl.textContent = (err >= 0 ? "+" : "") + err.toFixed(2) + "°";
+  errEl.style.color = Math.abs(err) > 2 ? "var(--crit)" : (Math.abs(err) > 0.5 ? "var(--warn)" : "var(--good)");
+}
+requestAnimationFrame(renderFrame);
 </script>
 </body>
 </html>
