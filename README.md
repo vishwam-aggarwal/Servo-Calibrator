@@ -1,29 +1,30 @@
 # Servo Calibrator
 
-A browser-based tool that finds a hobby servo's real pulse range and helps
-you install/calibrate it — using an AS5600 magnetic encoder as ground
-truth, instead of a protractor and guesswork.
+Two browser-based tools for working with a hobby RC servo, both using an
+AS5600 magnetic encoder as ground truth instead of a protractor and
+guesswork:
 
-Two things it does, independently:
+1. **Servo Calibrator** — finds a servo's real pulse range and walks you
+   through installing/calibrating it.
+2. **Trajectory Demo** — a small, ODrive-GUI-style live trajectory
+   visualizer: command a step/square-wave/sine-wave move and watch
+   setpoint vs. measured actual position/velocity/error live, including
+   an interactive toggle to see how much a calibration lookup table
+   improves accuracy over a plain 2-point linear formula.
 
-1. **Range finder** — walks the servo out to its real mechanical limits
-   (stall-detected, not guessed) and reports the safe min/max pulse width
-   and total travel. Save the result as a file, or hand the numbers to
-   any servo library that wants them.
-2. **Installation & calibration wizard** — a guided, step-by-step flow
-   (logical angle range → horn install → direction test → fine trim →
-   test drive → generated code) for mounting a servo in an application and
-   getting a correct, direction-aware calibration — all driven live by the
-   encoder instead of eyeballing it.
-
-No install, no build step. It's one HTML file that talks to an Arduino
-over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API).
+Both are single self-contained HTML files, no install, no build step,
+talking to an Arduino over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API).
+**They're two separate tools today; the plan is to merge them into one
+interface** (calibrate a servo, then immediately drive/visualize
+trajectories against that same calibration, without reconnecting) — see
+[`CLAUDE.md`](CLAUDE.md) for that roadmap and implementation notes for
+whoever picks it up.
 
 > **Status:** built and tested against real hardware (an AS5600 + a
 > generic analog servo on an Arduino Nano clone) — see
 > [Known limitations](#known-limitations) for what's still rough around
-> the edges. **The firmware currently depends on two of my other
-> libraries that aren't public yet** — see
+> the edges. **The firmware currently depends on libraries of mine that
+> aren't public yet** — see
 > [Dependencies](#requirements--dependencies) before you try to build it.
 
 ## Contents
@@ -32,6 +33,7 @@ over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_AP
 - [Quick start](#quick-start)
 - [What it looks like in use](#what-it-looks-like-in-use)
 - [How it works](#how-it-works)
+- [Trajectory Demo](#trajectory-demo)
 - [The generated constructor & Universal-Motor-Interface](#the-generated-constructor--universal-motor-interface)
 - [Wiring](#wiring)
 - [Requirements & dependencies](#requirements--dependencies)
@@ -115,6 +117,37 @@ Two pieces:
   to the board over Web Serial. Nothing is sent anywhere except over the
   USB serial connection to your Arduino.
 
+## Trajectory Demo
+
+A second, separate tool in this repo (`TrajectoryDemo.html` +
+`TrajectoryDemo_Companion/`) — a small, single-joint live trajectory
+commander/visualizer, closer to a mini ODrive GUI than a calibration
+wizard:
+
+- **Step, square wave, or sine wave.** Command a single trapezoidal move
+  to a target angle; a continuous *post-trajectory* square wave (every
+  edge still a real, v<sub>max</sub>/a<sub>max</sub>-limited trapezoidal
+  move, just auto-repeating); or a continuous sine wave that
+  deliberately bypasses trajectory shaping entirely, for raw
+  tracking/frequency-response exploration.
+- **Live rolling charts** — position, velocity, and position error, all
+  auto-scaled, setpoint vs. AS5600-measured actual, updating continuously
+  (even at rest) like an oscilloscope rather than resetting per move.
+- **See the calibration table's improvement interactively.** A live
+  toggle switches the firmware between the plain 2-point linear
+  pulse↔angle formula and a 20-point calibration lookup table — mid-move,
+  without touching whatever trajectory is currently running — and the
+  error chart's line is colored by which model was active, alongside a
+  running mean-error-per-model comparison, so the improvement is
+  something you watch happen rather than a number you have to take on
+  faith.
+
+Same quick-start pattern as the calibrator: flash
+`TrajectoryDemo_Companion/TrajectoryDemo_Companion.ino` once, serve
+`TrajectoryDemo.html` over `http://` (same Web Serial / Chrome-or-Edge
+requirement), connect, and go. See [`CLAUDE.md`](CLAUDE.md) for firmware
+protocol/architecture details.
+
 ## The generated constructor & Universal-Motor-Interface
 
 The wizard's last step generates a ready-to-paste C++ constructor, e.g.:
@@ -187,17 +220,22 @@ have them:**
 |---|---|---|
 | [RobTillaart's `AS5600`](https://github.com/RobTillaart/AS5600) | Low-level AS5600 I²C register access | Public — `arduino-cli lib install "AS5600"` or via Library Manager |
 | [Adafruit PWM Servo Driver Library](https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library) | PCA9685 support only | Public |
-| **Universal-Encoder-Interface** (mine) | Wraps the AS5600 library behind a generic encoder interface — used **unconditionally**, every build needs it | **Not public yet** |
-| **Universal-Motor-Interface** (mine) | Its `PCA9685Backend` for raw PCA9685 pulse writes — only needed for the PCA9685 config path, not plain RC-servo use | **Not public yet** |
+| **Universal-Encoder-Interface** (mine) | Wraps the AS5600 library behind a generic encoder interface — used **unconditionally** by `ServoCalibrator_Companion`, every build needs it | **Not public yet** |
+| **Universal-Motor-Interface** (mine) | `ServoCalibratorCompanion`'s `PCA9685Backend` (PCA9685 config path only); `TrajectoryDemo_Companion`'s `ServoCalibrationTable.h` (used **unconditionally** — its angle↔pulse math, both linear and lookup-table) | **Not public yet** |
+| **Universal-Trajectory-Interface** (mine) | `TrajectoryDemo_Companion`'s `TrapezoidalProfile` — used **unconditionally**, every Trajectory Demo build needs it | **Not public yet** |
 
-In short: **the firmware as committed here won't compile for anyone
+In short: **`ServoCalibrator_Companion` won't compile for anyone
 without access to Universal-Encoder-Interface**, regardless of whether
 you're using a plain RC servo or a PCA9685 — that dependency isn't
-optional. Universal-Motor-Interface is only needed if you're
-configuring a PCA9685 channel; a plain-pin RC servo setup doesn't touch
-it at build time at all (only the *generated constructor* references it,
-as C++ source text you'd paste into your own project later — see
+optional; Universal-Motor-Interface is only needed there for the PCA9685
+config path (a plain-pin RC servo setup doesn't touch it at build time
+at all — only the *generated constructor* references it, as C++ source
+text you'd paste into your own project later, see
 [above](#the-generated-constructor--universal-motor-interface)).
+**`TrajectoryDemo_Companion` won't compile for anyone without access to
+*both* Universal-Motor-Interface and Universal-Trajectory-Interface** —
+both are unconditional there, regardless of which trajectory mode you
+use.
 
 **Browser:** Chrome or Edge (desktop) for the app — Web Serial isn't
 available in Firefox or Safari.
@@ -243,19 +281,23 @@ part of the command/response protocol.
 
 ## Known limitations
 
-- Tested on Chrome/Edge over `http://localhost`; opening the app directly
-  via `file://` has not been confirmed to work reliably with Web Serial.
+- Tested on Chrome/Edge over `http://localhost`; opening either app
+  directly via `file://` has not been confirmed to work reliably with Web
+  Serial.
 - The firmware's motor configuration and the encoder's software zero
   offset both live in the Arduino's RAM and are lost on any board reset
-  (power cycle, reconnect, reflash). The app detects and recovers from
-  both cases automatically where it can, but if something behaves
-  unexpectedly after a board reset mid-session, reconnecting and
+  (power cycle, reconnect, reflash). The Servo Calibrator app detects and
+  recovers from both cases automatically where it can, but if something
+  behaves unexpectedly after a board reset mid-session, reconnecting and
   reapplying configuration is the first thing to try.
-- PCA9685 support is implemented and configuration-tested, but hasn't
-  had the same depth of real-hardware exercise as the plain RC-servo
-  path.
-- No installer/packaged build — it's meant to stay a single portable HTML
-  file, served locally.
+- PCA9685 support (Servo Calibrator only) is implemented and
+  configuration-tested, but hasn't had the same depth of real-hardware
+  exercise as the plain RC-servo path.
+- No installer/packaged build for either tool — both are meant to stay a
+  single portable HTML file, served locally.
+- The two tools are separate today (connect/calibrate in one, then
+  reconnect in the other to drive trajectories against that
+  calibration) — see [`CLAUDE.md`](CLAUDE.md) for the plan to merge them.
 
 Issues and pull requests welcome.
 
