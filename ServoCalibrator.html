@@ -690,6 +690,24 @@ el("btn-connect").onclick = async () => {
     appendLog("# connected, waiting for board...");
     const gotReady = await waitForReadyBanner();
     if (!gotReady) appendLog("# (no ready banner seen in time -- board may already be running; try Calibrate/Import anyway)");
+
+    // Discard anything that arrived during the boot/reset window before
+    // this point -- e.g. a garbled byte or two from the USB-serial
+    // adapter resyncing right as opening the port resets the board via
+    // DTR. Nothing legitimate can be sitting in the reply queue this
+    // early (no command has been sent yet this session), so anything
+    // here is noise. Real bug hit without this: a boot-garbled line
+    // that didn't start with a clean "#" fell through as if it were a
+    // reply, got queued, and silently became GETTABLE's "answer" below
+    // -- which pushed GETTABLE's real reply onto the queue instead,
+    // which then got consumed by the next real command (IMPORT) as ITS
+    // reply, misdelivering everything after by one slot. The device had
+    // genuinely imported successfully; the UI just never found out.
+    if (link.lineQueue.length > 0) {
+      appendLog(`# discarding ${link.lineQueue.length} stray line(s) from the boot window`);
+      link.lineQueue = [];
+    }
+
     // Best-effort recovery of a calibration already on the board (e.g.
     // reconnecting after a page reload, board itself never reset).
     try {
