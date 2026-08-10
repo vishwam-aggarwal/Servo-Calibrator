@@ -228,6 +228,51 @@ independent clean runs post-fix (range, and every table point, within
 1–2µs of each other) — a genuinely wide-range digital servo, not the
 narrow ~76° the corrupted runs kept reporting.
 
+## Real bug found in the browser app, live (2026-08-10)
+
+First real browser session against the fixed firmware surfaced a
+protocol-level bug in `ServoCalibrator.html` itself, not the device —
+caught from the user's own pasted serial log, not a lab test:
+
+An `IMPORT` was sent, the firmware genuinely started processing it
+(`# IMPORT: re-anchoring live zero reference...` proves it), but
+`IMPORT`'s client-side timeout was still `15000ms` — left over from
+before `rampTo()` existed. `IMPORT`'s re-anchor now does up to three
+`rampTo()` moves, and the first one (from wherever the servo happens to
+be sitting to `minPulseUs`) can legitimately take 20+ seconds on its
+own. The 15s client timeout fired while the device was still correctly
+working in the background — **a client-side timeout doesn't stop the
+device**, it only gives up on that one promise. The UI let more commands
+through right after (`GO`, a second `IMPORT`, `CALIBRATE`), which queued
+up behind the still-in-flight first `IMPORT` on the wire. Once the first
+reply *did* eventually arrive, it got consumed by whichever
+`sendCommand()` call happened to be waiting at that moment — not
+necessarily the one that sent it — and every reply after that was
+misdelivered by one slot (`GO` showed an `IMPORT` usage error; `CALIBRATE`
+logged the same stale error too). Not several bugs, one root cause:
+overlapping commands are never safe against this firmware's blocking,
+single-threaded design, and nothing prevented the UI from sending them.
+
+Fixed two ways, not just the one timeout value that happened to trigger
+it:
+- `IMPORT`'s timeout: `15000ms` → `90000ms`, generous margin over the
+  real worst case.
+- **A command busy-lock** (`commandBusy`/`setBusy()`/`sendGuarded()`):
+  every command button (`Calibrate`/`Go`/`Square`/`Sine`/`Stop`/the model
+  toggle/the import file label) is disabled for the duration of any one
+  in-flight command, structurally preventing the overlap that caused
+  this — not just tuning the one timeout that happened to be too short
+  this time. Every `link.sendCommand()` call site now goes through
+  `sendGuarded()` instead of calling it directly.
+
+Verified via `claude-in-chrome` mock testing against the real page code:
+a deliberately slow-to-resolve command correctly disables every other
+command button (confirmed a second click while busy never even sends —
+the button was truly `disabled`, not just visually dimmed); buttons
+correctly re-enable after both a successful resolve and a rejected/timed-out
+one; `sendGuarded()` correctly refuses to send when already busy with a
+clear message.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
