@@ -39,6 +39,39 @@ depend on two sibling libraries, **Universal-Motor-Interface** and
 see the README's dependency table for exactly what that means for
 building this repo's firmware).
 
+## Sketchbook layout (2026-08-09)
+
+**This folder (`Arduino/Servo-Calibrator/`, a real `git clone` of this
+repo) is now the working root for this whole project — not the
+sketchbook's other top-level folders.** Cleaned up a pile of one-off
+test/experiment sketches that had accumulated directly under
+`Arduino/` (`TrajectorySmoothnessTest`, `DualVsAvgTest`,
+`UMI_CalTable_HWTest`, plus the now-redundant `ServoCalibrator_App`/
+`ServoCalibrator_Companion`/`TrajectoryDemo_App`/`TrajectoryDemo_Companion`
+source folders, superseded by this repo's own copies) — their useful
+conclusions are already captured in this repo, the wider sketchbook's
+other CLAUDE.md files, and project memory; the raw CSVs from the original
+`Servo_Auto_Calibrator` characterization project were archived into
+[`historical-data/`](historical-data/) first since those weren't
+duplicated anywhere else.
+
+**Going forward: any `.ino` needed temporarily (a smoke test, a one-off
+hardware check, a throwaway experiment) goes in a subfolder here**
+(`Servo-Calibrator/SomeTempTest/SomeTempTest.ino`), not as a sibling
+folder directly under `Arduino/`. `arduino-cli`'s sketchbook/user
+directory is still `Arduino/` itself (unchanged — `libraries/` stays
+there, that's where `arduino-cli` resolves dependencies from regardless
+of which subfolder a given sketch lives in), so this is purely an
+organizational choice, not a toolchain change. Temporary sketches don't
+need to be committed/pushed unless they turn into something worth
+keeping — `git status` in this folder will show them as untracked, which
+is fine; only `git add` what's actually meant to ship.
+
+The sketchbook's other top-level folders that predate this project
+entirely (`Arm_Inverse_Kinematics`, `CD22_Logger*`, `MyFiveBarRobot`,
+`ODriveCAN_UMI_Test`, `ServoHelper`, `Servo_Test`, `Traj_Planner`) were
+left alone — unrelated projects, not part of this cleanup.
+
 ## Final goal: merge into one interface
 
 **These are not meant to stay two separate tools.** The end state is a
