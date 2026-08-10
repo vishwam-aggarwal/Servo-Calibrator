@@ -273,6 +273,51 @@ correctly re-enable after both a successful resolve and a rejected/timed-out
 one; `sendGuarded()` correctly refuses to send when already busy with a
 clear message.
 
+## A second live-session bug: boot-time serial garbage misdelivered as a reply (2026-08-10)
+
+Reloaded the app after the busy-lock fix above; the very next real
+session hit a *different* command-desync bug, from the user's own pasted
+log again: `> IMPORT ...` was immediately followed by
+`# import failed: Import rejected: ERR NOT_CALIBRATED` — but right below
+that, `# IMPORT: re-anchoring live zero reference...` then `< OK` proved
+the device had genuinely accepted and completed the import. The UI just
+never found out.
+
+Root cause, one line up in the log: `< �)# ServoCalibrator_Companion
+booting...` — garbled bytes (a common artifact of the USB-serial adapter
+resyncing right as opening the port resets the board via DTR) prefixed
+what should have been a clean `#`-only boot-log line. `SerialLink._onLine()`
+only recognizes a line as ignorable log noise if it *starts* with `#` —
+this one didn't, because of the garbage prefix, so it fell through to the
+generic reply path and got queued as if it were an answer to some future
+command, even though nothing had been sent yet. The next real command
+(`GETTABLE`, sent automatically on connect) consumed that stray line as
+its own reply instead of waiting for the device's real one; the device's
+*actual* `GETTABLE` reply then queued up in turn and got consumed by the
+next real command (`IMPORT`) instead — misdelivering every reply after
+the boot garbage by one slot, same failure shape as the busy-lock bug
+above, different trigger (a garbled boot byte, not an overlapping
+command).
+
+Fixed by discarding whatever's in `link.lineQueue` right after the ready
+banner is confirmed, before sending the first real command
+(`GETTABLE`) — nothing legitimate can be queued that early in a session,
+so anything sitting there at that point is unambiguously boot-window
+noise, safe to drop unconditionally. Verified via `claude-in-chrome`:
+injected a stray line before the ready banner arrived, confirmed it's
+queued, then confirmed it's fully drained before `GETTABLE` is sent, and
+that `GETTABLE`'s real reply is correctly applied afterward.
+
+Two real bugs in a row from real usage, not lab conditions — both the
+same underlying failure mode (a stray/late/misrouted line silently
+consumed by the wrong pending command, cascading into everything after
+it), triggered by two different, unrelated causes. Worth remembering if
+a third variant ever shows up: the request/response `SerialLink` design
+has no general defense against *any* unexpected line reaching the reply
+queue — each fix so far has closed one specific way that can happen
+(overlapping commands; boot-time garbage) rather than the queue itself
+being made robust to it in general.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
