@@ -116,12 +116,16 @@ struct ScanResult {
 const int SERVO_PIN = A3;
 const unsigned long SAMPLE_MS = 20;  // 50Hz telemetry + control rate
 
-// Hard safety bounds for CALIBRATE's stall-scan -- generous defaults
-// covering the vast majority of hobby servos (same values UMI's
-// examples/RCServoAutoCalibration uses). Never commanded outside this
-// even if a stall is never detected.
-const int ABS_FLOOR_US = 200;
-const int ABS_CEIL_US  = 2900;
+// Hard safety bounds for CALIBRATE's stall-scan -- never commanded
+// outside this even if a stall is never detected. Widened (2026-08-10)
+// from UMI's examples/RCServoAutoCalibration defaults (200/2900) after a
+// real digital servo's low-end scan hit 200us without ever detecting a
+// plateau -- its real range (or its own internal pulse clamp) sits
+// outside what was tuned for the analog servo this project started
+// with. If a scan ever hits these new bounds without stalling, widen
+// again rather than assuming the servo is just unusually wide-range.
+const int ABS_FLOOR_US = 80;
+const int ABS_CEIL_US  = 3100;
 const int CENTER_US    = 1500;
 
 const int STALL_STEP_US      = 10;
@@ -173,11 +177,31 @@ float runningAngle = 0.0f;
 float zeroRefAngle = 0.0f;
 float signConv = 1.0f;
 
+// Rejects an implausible single-step delta rather than trusting it.
+// Found the hard way: even with every big jump now ramped away (see
+// rampTo() below -- every commanded step anywhere in this firmware is
+// now <=SWEEP_STEP_US, ~0.6deg of expected real motion at most), a real
+// CALIBRATE run against this servo still showed sweepDown() corrupted
+// end to end (every intermediate point stuck at exactly 0) while
+// sweepUp() had 18 of its 20 points crammed into a ~30us band near the
+// low endpoint -- both are the signature of ONE bad/noisy AS5600 read
+// spiking the reported angle by tens of degrees in a single call,
+// which then permanently corrupts every reading after it (lastRawDeg
+// becomes the bad value, so the wrap-safe correction above has no way
+// to recover). Same failure class this project already hit once before
+// with a different AS5600 wrapper's continuous mode. Since a real step
+// is never supposed to be more than a couple of degrees now, anything
+// beyond REJECT_THRESHOLD_DEG is far more likely a glitch than genuine
+// motion -- skip it, and don't update lastRawDeg either, so the next
+// (presumably good) sample is compared against the same last-known-good
+// reference instead of the bad one.
+const float REJECT_THRESHOLD_DEG = 20.0f;
 float updateRunningAngle() {
   float raw = encoder.readAngle() * AS5600_RAW_TO_DEGREES;
   float delta = raw - lastRawDeg;
   while (delta > 180.0f) delta -= 360.0f;
   while (delta < -180.0f) delta += 360.0f;
+  if (fabs(delta) > REJECT_THRESHOLD_DEG) return runningAngle;
   runningAngle += delta;
   lastRawDeg = raw;
   return runningAngle;
@@ -189,23 +213,72 @@ float measuredDeg() {
   updateRunningAngle();
   return signConv * (runningAngle - zeroRefAngle);
 }
+// Requires the reading to be stable for a sustained TIME window, not
+// just a fixed sample count -- caught the hard way against a fast
+// digital servo: 3 samples 40ms apart (120ms total) could briefly look
+// flat during the slow start of a much longer ramped motion (this
+// servo's response is evidently far more gradual than the analog servo
+// this threshold was originally tuned against), declaring "settled" long
+// before the servo actually arrived. The sweep loop would then start
+// commanding new, higher pulses while the servo was still catching up to
+// the OLD one -- and when it eventually did catch up in one big real
+// jump, that jump was large enough in a single 200ms window to break the
+// wrap-safe unwrap assumption in updateRunningAngle(), permanently
+// corrupting the running-angle reference for the rest of that sweep
+// (this is what produced a real CALIBRATE run with 18 of 20 table points
+// stuck at 0 -- diagnosed via an added trace, not guessed).
 float pollUntilSettled(unsigned long timeoutMs = 4000) {
+  const unsigned long REQUIRED_STABLE_MS = 300;
   unsigned long start = millis();
   float prev = updateRunningAngle();
-  int stableCount = 0;
+  unsigned long stableSinceMs = millis();
   while (millis() - start < timeoutMs) {
     delay(40);
     float cur = updateRunningAngle();
     if (fabs(cur - prev) < 0.15f) {
-      stableCount++;
-      if (stableCount >= 3) return cur;
+      if (millis() - stableSinceMs >= REQUIRED_STABLE_MS) return cur;
     } else {
-      stableCount = 0;
+      stableSinceMs = millis();
     }
     prev = cur;
   }
   Serial.println(F("# WARNING: settle timed out"));
   return prev;
+}
+
+// ------------------------------------------------------------------
+// Real root cause (found via a diagnostic trace, not guessed): a fast
+// digital servo, commanded in one shot across most of its range (e.g.
+// sweepUp()'s initial fromUs jump, right after the opposite-end stall
+// scan left off), can sit with ZERO measurable movement for an extended
+// stretch -- longer than any reasonable "settled" wait -- before
+// suddenly snapping most of the way there in one step. That single big
+// step, sampled across a normal ~200ms interval, is large enough to
+// break updateRunningAngle()'s wrap-safe ±180deg assumption, permanently
+// corrupting the running-angle reference for the rest of that sweep
+// (confirmed: bumping pollUntilSettled()'s required-stable duration from
+// 120ms to 300ms made zero difference to the corrupted trace -- the
+// servo genuinely isn't moving yet during that whole window, not just
+// "briefly looking stable mid-ramp", so waiting longer for "stable"
+// doesn't help). Fix: never send this servo one big jump at all --
+// rampTo() re-commands the pulse in the same small steps/pace the sweep
+// loop itself already uses successfully (SWEEP_STEP_US/SWEEP_SETTLE_MS),
+// so no single command is ever large enough to trigger whatever internal
+// latency/queuing causes the snap, regardless of the exact mechanism.
+int currentPulseUs = CENTER_US;
+void writePulse(int us) {
+  servo.writeMicroseconds(us);
+  currentPulseUs = us;
+}
+void rampTo(int targetUs) {
+  int step = (targetUs >= currentPulseUs) ? SWEEP_STEP_US : -SWEEP_STEP_US;
+  while (currentPulseUs != targetUs) {
+    int next = currentPulseUs + step;
+    if ((step > 0 && next > targetUs) || (step < 0 && next < targetUs)) next = targetUs;
+    writePulse(next);
+    updateRunningAngle();
+    delay(SWEEP_SETTLE_MS);
+  }
 }
 
 // ------------------------------------------------------------------
@@ -276,7 +349,7 @@ uint16_t pulseForDeg(float deg) {
   if (us > maxPulseUs) us = (float)maxPulseUs;
   return (uint16_t)us;
 }
-void driveTo(float deg) { servo.writeMicroseconds(pulseForDeg(deg)); }
+void driveTo(float deg) { writePulse(pulseForDeg(deg)); }
 
 // ------------------------------------------------------------------
 // Setpoint state machine -- unchanged from TrajectoryDemo_Companion.
@@ -399,9 +472,26 @@ ScanResult stallScan(int startUs, int stepUs) {
   int windowPulse[STALL_WINDOW];
   uint8_t windowLen = 0, windowHead = 0;
 
+  // No delay(400) before the first pollUntilSettled() call here (or in
+  // sweepUp()/sweepDown() below) -- a blind delay before angle-tracking
+  // starts is a real bug if the move commanded is large: this servo
+  // (fast, and this call can follow a nearly-full-range jump, e.g.
+  // sweepUp() starting right after the high-limit scan left off near the
+  // opposite end) can cover most of its whole stroke inside 400ms,
+  // untracked -- the very next pollUntilSettled() sample then sees a
+  // single-step delta that can exceed the wrap-safe ±180deg assumption,
+  // silently corrupting the running-angle reference from that point on.
+  // Caught the hard way: a real CALIBRATE run against a fast digital
+  // servo found its two stall endpoints correctly but the resulting
+  // table had 18 of 20 points as 0 -- sweepUp()'s big fromUs jump,
+  // followed by a blind delay(400), was the culprit. pollUntilSettled()
+  // polling from the moment the move is commanded (no preceding blind
+  // window) tracks any move safely regardless of size, same fix as the
+  // fixed-delay-vs-variable-size-move lesson this project already
+  // learned once before (see the repeatability-test gotcha in
+  // Servo_Auto_Calibrator's history).
   int pulse = startUs;
-  servo.writeMicroseconds(pulse);
-  delay(400);
+  rampTo(pulse);
   float angle = pollUntilSettled();
 
   window[windowHead] = angle;
@@ -416,7 +506,7 @@ ScanResult stallScan(int startUs, int stepUs) {
     if (stepUs < 0 && nextPulse < ABS_FLOOR_US) { result.hitAbsBound = true; break; }
     if (stepUs > 0 && nextPulse > ABS_CEIL_US)  { result.hitAbsBound = true; break; }
 
-    servo.writeMicroseconds(nextPulse);
+    writePulse(nextPulse);
     delay(STALL_SETTLE_MS);
     pulse = nextPulse;
     angle = updateRunningAngle();
@@ -442,8 +532,11 @@ ScanResult stallScan(int startUs, int stepUs) {
 }
 
 void sweepUp(int fromUs, int toUs) {
-  servo.writeMicroseconds(fromUs);
-  delay(400);
+  // rampTo(), not a raw jump -- this specific transition (from wherever
+  // the preceding high-limit stall scan left off, down to fromUs) is the
+  // one that broke a real calibration run against a fast digital servo;
+  // see rampTo()'s own comment for why.
+  rampTo(fromUs);
   float angle = pollUntilSettled();
 
   upPulseAtTarget[0] = fromUs;
@@ -452,7 +545,7 @@ void sweepUp(int fromUs, int toUs) {
   float prevAngle = angle;
 
   for (int pulse = fromUs + SWEEP_STEP_US; pulse <= toUs; pulse += SWEEP_STEP_US) {
-    servo.writeMicroseconds(pulse);
+    writePulse(pulse);
     delay(SWEEP_SETTLE_MS);
     float cur = updateRunningAngle();
 
@@ -466,15 +559,17 @@ void sweepUp(int fromUs, int toUs) {
     prevAngle = cur;
   }
 
-  servo.writeMicroseconds(toUs);
+  writePulse(toUs);
   delay(SWEEP_SETTLE_MS);
   updateRunningAngle();
   upPulseAtTarget[CAL_TABLE_POINTS - 1] = toUs;
 }
 
 void sweepDown(int fromUs, int toUs) {
-  servo.writeMicroseconds(fromUs);
-  delay(400);
+  // rampTo() here too -- currently a no-op in practice (sweepDown's
+  // fromUs always matches wherever sweepUp just left off), but not worth
+  // relying on that staying true.
+  rampTo(fromUs);
   float angle = pollUntilSettled();
 
   downPulseAtTarget[CAL_TABLE_POINTS - 1] = fromUs;
@@ -483,7 +578,7 @@ void sweepDown(int fromUs, int toUs) {
   float prevAngle = angle;
 
   for (int pulse = fromUs - SWEEP_STEP_US; pulse >= toUs; pulse -= SWEEP_STEP_US) {
-    servo.writeMicroseconds(pulse);
+    writePulse(pulse);
     delay(SWEEP_SETTLE_MS);
     float cur = updateRunningAngle();
 
@@ -497,7 +592,7 @@ void sweepDown(int fromUs, int toUs) {
     prevAngle = cur;
   }
 
-  servo.writeMicroseconds(toUs);
+  writePulse(toUs);
   delay(SWEEP_SETTLE_MS);
   updateRunningAngle();
   downPulseAtTarget[0] = toUs;
@@ -520,8 +615,7 @@ void handleCalibrate() {
   sinePending = false;
 
   Serial.println(F("# CAL: centering..."));
-  servo.writeMicroseconds(CENTER_US);
-  delay(400);
+  rampTo(CENTER_US);
   resyncRunningAngle();
   runningAngle = 0.0f;
   pollUntilSettled();
@@ -536,7 +630,7 @@ void handleCalibrate() {
   Serial.print(F("# CAL: low done, pulse=")); Serial.print(low.pulseUs);
   Serial.print(F(" angle=")); Serial.println(low.angleDeg, 2);
 
-  servo.writeMicroseconds(CENTER_US);
+  rampTo(CENTER_US);
   pollUntilSettled();
 
   Serial.println(F("# CAL: scanning high limit..."));
@@ -631,18 +725,17 @@ void handleImport(int n) {
   // quicker than a full CALIBRATE (a couple of small moves, not a whole
   // stall-scan+sweep) since the range/table itself is already known.
   Serial.println(F("# IMPORT: re-anchoring live zero reference..."));
-  servo.writeMicroseconds(minPulseUs);
-  delay(400);
+  rampTo(minPulseUs);
   resyncRunningAngle();
   runningAngle = 0.0f;
   zeroRefAngle = pollUntilSettled();
   signConv = 1.0f;
 
-  servo.writeMicroseconds(minPulseUs + (maxPulseUs - minPulseUs) / 10);
+  rampTo(minPulseUs + (maxPulseUs - minPulseUs) / 10);
   float probe = pollUntilSettled();
   signConv = ((probe - zeroRefAngle) >= 0.0f) ? 1.0f : -1.0f;
 
-  servo.writeMicroseconds(minPulseUs);
+  rampTo(minPulseUs);
   pollUntilSettled();
 
   holdSetpointDeg = 0.0f;
@@ -818,7 +911,13 @@ void setup() {
   }
 
   servo.attach(SERVO_PIN, ABS_FLOOR_US, ABS_CEIL_US);
-  servo.writeMicroseconds(CENTER_US);
+  // writePulse(), not a bare write -- correctly seeds currentPulseUs so
+  // every later rampTo() call ramps from a known-accurate baseline. The
+  // servo's actual pre-boot position is arbitrary and this first jump
+  // itself is unramped (nothing depends on angle-tracking correctness
+  // yet -- CALIBRATE/IMPORT establish that fresh later), but currentPulseUs
+  // must still end up matching whatever was actually just commanded.
+  writePulse(CENTER_US);
 
   Serial.println(F("# READY -- not calibrated yet. Send CALIBRATE or IMPORT."));
 }
