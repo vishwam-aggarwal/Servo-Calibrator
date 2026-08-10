@@ -160,6 +160,74 @@ applied calibration exactly, `Import`'s round-trip building the correct
 `IMPORT` command and updating the UI, and a malformed import file
 rejected client-side before ever touching the serial link.
 
+## Real bugs found calibrating a second (digital) servo (2026-08-10)
+
+First real `CALIBRATE` run against a new servo — a branded digital unit,
+different from the analog one this firmware was developed and tested
+against — failed immediately: the low-limit stall-scan drove all the way
+to the hard safety floor (200µs) without ever detecting a plateau.
+**Not a bug** — this servo's real range (or its own internal pulse clamp)
+genuinely sits outside bounds tuned for the analog servo. Widened
+`ABS_FLOOR_US`/`ABS_CEIL_US` (200/2900 → 80/3100) and it stalled cleanly.
+
+What followed were three real, distinct firmware bugs, found one at a
+time via actual hardware diagnostics (added trace output, read the real
+data, changed the theory to match) — not guessed and shipped:
+
+1. **A blind `delay(400)` before the first angle sample, on a jump that
+   could be nearly the servo's full range.** `sweepUp()` commands its
+   `fromUs` in one shot right after the opposite-end stall scan left off
+   — for this faster/differently-geared digital servo, that jump could
+   complete inside the blind window, so the very first tracked sample was
+   already wrong. Fixed by never delaying blind before `updateRunningAngle()`
+   starts tracking a move.
+2. **That fix alone didn't help** — a real run showed 18 of 20 table
+   points stuck at exactly `0`. Added trace output (per-step
+   `pulse`/`cur`/`nextIdx`) rather than guessing again, and found the
+   actual mechanism: this servo can sit with **zero** measurable movement
+   for an extended stretch after a big commanded jump, then snap most of
+   the way there in one step — long enough that even `pollUntilSettled()`
+   waiting 300ms for sustained stability (bumped up from 120ms, tested,
+   made **zero difference** to the corrupted output — proving it wasn't a
+   "briefly looked stable mid-ramp" timing issue at all) still returned
+   long before the real motion started. Fixed properly: `rampTo()`
+   re-commands any big jump in the same small steps/pace the sweep loop
+   itself already uses successfully (`SWEEP_STEP_US`/`SWEEP_SETTLE_MS`),
+   so no single command sent to this servo is ever large — sidesteps
+   whatever internal latency/queuing causes the snap, regardless of the
+   exact mechanism. Centralized through `writePulse()`/`currentPulseUs`
+   so every big-jump call site (stall-scan start, sweep start, the
+   between-scans return to center, `IMPORT`'s re-anchor) ramps from a
+   correctly-tracked baseline instead of guessing.
+3. **Ramping fixed the zeros, but the values were still wrong** — now
+   clustered in a narrow ~30µs band near the low endpoint, and *below*
+   the servo's own established minimum pulse. Instrumented further
+   (printed the raw `up[]`/`down[]` arrays directly): `sweepUp()` had 18
+   points crammed into ~30µs (the signature of one bad reading spiking
+   the tracked angle by tens of degrees in a single call, so *all* of
+   that step's target crossings got interpolated within one narrow
+   window), `sweepDown()` was corrupted end to end. Root cause: a stray
+   AS5600 read, at any point, permanently corrupts
+   `updateRunningAngle()`'s wrap-safe accumulator — the exact failure
+   class this project already hit once before with a *different* AS5600
+   wrapper's continuous mode, just not yet guarded against in this
+   firmware's own hand-rolled tracking. Since every step is now provably
+   small (fix #2 made that true everywhere), it's finally safe to reject
+   implausible single-step deltas outright without risking a legitimate
+   big jump being mistaken for a glitch: `REJECT_THRESHOLD_DEG` (20°)
+   in `updateRunningAngle()` discards an implausible reading rather than
+   trusting it, without advancing `lastRawDeg`, so the next (presumably
+   good) sample compares against the same last-known-good reference.
+
+**This also overturned an earlier "result"**: every prior successful-looking
+run on this servo had reported 250–2080µs / ~76° stroke — a real,
+reproducible number, just wrong, corrupted by exactly the bugs above
+(the stall-scan itself was affected, not only the sweep). The real range
+is **350–2080µs, 237.4° stroke** — confirmed reproducible across two
+independent clean runs post-fix (range, and every table point, within
+1–2µs of each other) — a genuinely wide-range digital servo, not the
+narrow ~76° the corrupted runs kept reporting.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
