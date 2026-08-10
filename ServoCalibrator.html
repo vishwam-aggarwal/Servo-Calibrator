@@ -507,6 +507,45 @@ function showTab(name) {
 TABS.forEach(t => el(`tab-btn-${t}`).onclick = () => showTab(t));
 
 /* ============================================================
+   Command busy-lock. The firmware is a blocking, single-threaded
+   executor for long-running commands (CALIBRATE takes 1-3 minutes;
+   IMPORT's physical re-anchor can legitimately take 20+ seconds on a
+   servo that needs a big rampTo() from wherever it currently is). The
+   device doesn't reject an overlapping command sent while one is still
+   in flight -- it just queues the bytes, and once both replies
+   eventually arrive, whichever sendCommand() call happens to be
+   waiting first consumes whichever reply arrives first. Once that
+   pairing slips by even one command, every reply after it is
+   misdelivered to the wrong caller until reconnecting.
+   Real bug hit in practice: IMPORT's own client-side timeout used to
+   be shorter than its worst-case re-anchor time, so a still-in-progress
+   IMPORT got wrongly treated as failed, the UI let more commands
+   through immediately after, and every reply from then on landed on
+   the wrong command (GO showed an IMPORT error, etc). Locking every
+   command button while one request is in flight prevents the overlap
+   structurally, rather than just tuning one timeout value that could
+   still be wrong for some future case.
+   ============================================================ */
+let commandBusy = false;
+const BUSY_LOCK_IDS = ["btn-calibrate", "btn-go", "btn-square", "btn-sine", "btn-stop", "model-btn-linear", "model-btn-table"];
+function setBusy(isBusy) {
+  commandBusy = isBusy;
+  BUSY_LOCK_IDS.forEach(id => { el(id).disabled = isBusy; });
+  el("btn-import-label").classList.toggle("disabled", isBusy);
+}
+// Every serial command that expects a reply should go through this,
+// not link.sendCommand() directly -- see the comment above.
+async function sendGuarded(cmd, timeoutMs = 3000) {
+  if (commandBusy) throw new Error("Still waiting on a previous command to finish -- try again in a moment.");
+  setBusy(true);
+  try {
+    return await link.sendCommand(cmd, timeoutMs);
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* ============================================================
    Calibration model toggle (Linear 2-pt vs. Table 20-pt) -- switches
    live via MODEL, independent of which Step/Square/Sine tab is showing
    and without touching the current setpoint/motion at all.
@@ -515,7 +554,7 @@ TABS.forEach(t => el(`tab-btn-${t}`).onclick = () => showTab(t));
   el(`model-btn-${m.toLowerCase()}`).onclick = async () => {
     try {
       requireConnected();
-      const resp = await link.sendCommand(`MODEL ${m}`);
+      const resp = await sendGuarded(`MODEL ${m}`);
       if (!resp.startsWith("OK")) throw new Error("MODEL rejected: " + resp);
     } catch (e) { appendLog("# " + e.message); }
   };
@@ -576,15 +615,12 @@ el("btn-calibrate").onclick = async () => {
   try {
     requireConnected();
     setCalPill("running");
-    el("btn-calibrate").disabled = true;
-    const resp = await link.sendCommand("CALIBRATE", 240000);
+    const resp = await sendGuarded("CALIBRATE", 240000);
     if (!resp.startsWith("CALRESULT")) throw new Error("Calibration failed: " + resp);
     applyCalibration(parseCalResult(resp));
   } catch (e) {
     appendLog("# " + e.message);
     setCalPill(calibration ? "done" : "idle");
-  } finally {
-    el("btn-calibrate").disabled = false;
   }
 };
 
@@ -609,7 +645,13 @@ el("file-import").onchange = async (e) => {
       throw new Error("Malformed calibration file (expected maxAngleDeg/minPulseUs/maxPulseUs + 20 points).");
     }
     setCalPill("running");
-    const resp = await link.sendCommand(buildImportCommand(cal), 15000);
+    // 90s, not 15s -- IMPORT's re-anchor does up to 3 rampTo() moves,
+    // and a ramp from wherever the servo currently sits to minPulseUs
+    // can legitimately take 20+ seconds on its own if that's most of
+    // the servo's range. A timeout shorter than the real worst case is
+    // exactly what caused the cascading command-desync bug this whole
+    // busy-lock exists to prevent -- see the comment above sendGuarded().
+    const resp = await sendGuarded(buildImportCommand(cal), 90000);
     if (!resp.startsWith("OK")) throw new Error("Import rejected: " + resp);
     applyCalibration(cal);
   } catch (err) {
@@ -651,7 +693,7 @@ el("btn-connect").onclick = async () => {
     // Best-effort recovery of a calibration already on the board (e.g.
     // reconnecting after a page reload, board itself never reset).
     try {
-      const resp = await link.sendCommand("GETTABLE", 3000);
+      const resp = await sendGuarded("GETTABLE", 3000);
       if (resp.startsWith("CALRESULT")) {
         applyCalibration(parseCalResult(resp));
         appendLog("# recovered existing calibration from the board");
@@ -676,7 +718,7 @@ el("btn-go").onclick = async () => {
     const vmax = parseFloat(el("in-vmax").value);
     const amax = parseFloat(el("in-amax").value);
     if (![target, vmax, amax].every(isFinite)) throw new Error("Fill in target/vmax/amax.");
-    const resp = await link.sendCommand(`GO ${target} ${vmax} ${amax}`);
+    const resp = await sendGuarded(`GO ${target} ${vmax} ${amax}`);
     if (!resp.startsWith("OK")) throw new Error("GO rejected: " + resp);
   } catch (e) { appendLog("# " + e.message); }
 };
@@ -690,7 +732,7 @@ el("btn-square").onclick = async () => {
     const vmax = parseFloat(el("in-sq-vmax").value);
     const amax = parseFloat(el("in-sq-amax").value);
     if (![lo, hi, period, vmax, amax].every(isFinite)) throw new Error("Fill in all square-wave fields.");
-    const resp = await link.sendCommand(`SQUARE ${lo} ${hi} ${period} ${vmax} ${amax}`);
+    const resp = await sendGuarded(`SQUARE ${lo} ${hi} ${period} ${vmax} ${amax}`);
     if (!resp.startsWith("OK")) throw new Error("SQUARE rejected: " + resp);
   } catch (e) { appendLog("# " + e.message); }
 };
@@ -702,7 +744,7 @@ el("btn-sine").onclick = async () => {
     const amp = parseFloat(el("in-sin-amp").value);
     const freq = parseFloat(el("in-sin-freq").value);
     if (![center, amp, freq].every(isFinite)) throw new Error("Fill in all sine-wave fields.");
-    const resp = await link.sendCommand(`SINE ${center} ${amp} ${freq}`);
+    const resp = await sendGuarded(`SINE ${center} ${amp} ${freq}`);
     if (!resp.startsWith("OK")) throw new Error("SINE rejected: " + resp);
   } catch (e) { appendLog("# " + e.message); }
 };
@@ -710,7 +752,7 @@ el("btn-sine").onclick = async () => {
 el("btn-stop").onclick = async () => {
   try {
     requireConnected();
-    const resp = await link.sendCommand("STOP");
+    const resp = await sendGuarded("STOP");
     if (!resp.startsWith("OK")) throw new Error("STOP failed: " + resp);
   } catch (e) { appendLog("# " + e.message); }
 };
