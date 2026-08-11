@@ -80,8 +80,13 @@ application code.
    Edge** (Web Serial isn't implemented in Firefox or Safari).
 4. **Connect, then Calibrate.** Click *Connect…*, pick your serial port
    in the browser's device picker, then click **Calibrate** — one button,
-   1–3 minutes, fully automated. Once it finishes, the command/chart
-   interface below unlocks.
+   a few minutes, fully automated. Once it finishes, the command/chart
+   interface below unlocks. Every large move the firmware makes during
+   `CALIBRATE`/`IMPORT` is deliberately slow and incremental (small steps,
+   a short pause between each) rather than one instant jump — found to
+   be necessary against at least one real servo that behaved oddly when
+   commanded a big pulse change in one shot (see `CLAUDE.md` for the
+   story); it's expected, not a stall.
 
 ## What it looks like in use
 
@@ -152,13 +157,16 @@ needs.
   `{maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}, …]}`.
 - **Import** loads a previously-exported file and pushes it to the board
   over serial (`IMPORT` — same fields, same order) — skips the full
-  physical stall-scan/sweep, but still does one quick physical
-  re-anchor (~2 small moves, a couple of seconds) to re-zero the AS5600's
-  live reference for the current session/mounting, since an imported
-  table carries the pulse curve but not a live sensor zero reference.
-  Reconnecting to a board that's still calibrated (never reset since)
-  also auto-recovers that state on connect, without needing to
-  re-import anything.
+  physical stall-scan/sweep, but still does a physical re-anchor (up to
+  3 moves) to re-zero the AS5600's live reference for the current
+  session/mounting, since an imported table carries the pulse curve but
+  not a live sensor zero reference. Those moves are the same slow,
+  incremental kind `CALIBRATE` uses (see [Quick start](#quick-start)) —
+  if the servo's current position is far from the table's `minPulseUs`,
+  the first one alone can take 20+ seconds; the app's own `IMPORT`
+  timeout is generous (90s) to match. Reconnecting to a board that's
+  still calibrated (never reset since) also auto-recovers that state on
+  connect, without needing to re-import anything.
 
 ## Wiring
 
@@ -208,10 +216,14 @@ Firefox or Safari.
   to find them. It stops advancing within a small margin of first
   detecting no motion, so it only grinds against a stop briefly — but it
   is intentionally doing that, twice (once per direction), by design.
-- A hard pulse-width safety ceiling (200–2900µs, fixed in firmware) exists
-  as a fail-safe in case stall detection doesn't trigger for some reason
-  (e.g. an encoder fault) — `CALIBRATE` aborts with a clear error instead
-  of silently accepting a bad range if either scan hits it.
+- A hard pulse-width safety ceiling (80–3100µs, fixed in firmware —
+  widened once already from a narrower default after a real servo's real
+  range fell outside it) exists as a fail-safe in case stall detection
+  doesn't trigger for some reason (e.g. an encoder fault) —
+  `CALIBRATE` aborts with a clear error instead of silently accepting a
+  bad range if either scan hits it. If that happens to you, it likely
+  means your servo's real range is wider than this default too — widen
+  `ABS_FLOOR_US`/`ABS_CEIL_US` in the firmware and reflash.
 
 ## Serial protocol reference
 
