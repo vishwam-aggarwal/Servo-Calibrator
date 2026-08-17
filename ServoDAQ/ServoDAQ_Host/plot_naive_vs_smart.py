@@ -6,7 +6,10 @@ of the smart coarse+fine scans (in summary_*.csv), not their full traces,
 so there was nothing to actually overlay against the naive sweep's full
 trace on a plot. This script re-runs both the naive sweep and find_range()
 on real hardware -- in one single serial connection, same as
-study_range.py -- and plots them together per side (low/high).
+study_range.py -- and plots naive, coarse, and fine as three separately
+colored traces on the same axes per side (low/high), so the smart
+algorithm's own two-phase (coarse scan, then back up and fine scan)
+behavior is visible directly, not just its combined result.
 
 Position reference note: opening the serial port resets the board (DTR),
 which re-zeros ServoDAQ_Companion's multi-turn tracking from wherever the
@@ -70,13 +73,15 @@ def main():
         )
         link.move_to(CENTER_US)  # leave the servo parked at center when done
 
-    smart_low = smart["low_coarse_trace"] + smart["low_fine_trace"]
-    smart_high = smart["high_coarse_trace"] + smart["high_fine_trace"]
+    low_coarse, low_fine = smart["low_coarse_trace"], smart["low_fine_trace"]
+    high_coarse, high_fine = smart["high_coarse_trace"], smart["high_fine_trace"]
 
     save_csv(os.path.join(DATA_DIR, f"naive_low_{stamp}.csv"), naive_low, ["pulse_us", "centideg"])
     save_csv(os.path.join(DATA_DIR, f"naive_high_{stamp}.csv"), naive_high, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"smart_low_{stamp}.csv"), smart_low, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"smart_high_{stamp}.csv"), smart_high, ["pulse_us", "centideg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_coarse_low_{stamp}.csv"), low_coarse, ["pulse_us", "centideg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_fine_low_{stamp}.csv"), low_fine, ["pulse_us", "centideg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_coarse_high_{stamp}.csv"), high_coarse, ["pulse_us", "centideg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_fine_high_{stamp}.csv"), high_fine, ["pulse_us", "centideg"])
     save_csv(os.path.join(DATA_DIR, f"summary_{stamp}.csv"), [
         ["naive", "low", low_edge[0], low_edge[1]],
         ["naive", "high", high_edge[0], high_edge[1]],
@@ -89,10 +94,13 @@ def main():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, (ax_low, ax_high) = plt.subplots(1, 2, figsize=(12, 5))
+    NAIVE_COLOR, COARSE_COLOR, FINE_COLOR = "#1f77b4", "#2ca02c", "#d62728"
 
-    ax_low.plot(*zip(*naive_low), "o-", label="naive", color="#1f77b4", markersize=3)
-    ax_low.plot(*zip(*smart_low), "o-", label="smart (coarse+fine)", color="#d62728", markersize=3)
+    fig, (ax_low, ax_high) = plt.subplots(1, 2, figsize=(13, 5))
+
+    ax_low.plot(*zip(*naive_low), "o-", label="naive", color=NAIVE_COLOR, markersize=3)
+    ax_low.plot(*zip(*low_coarse), "o-", label="smart: coarse", color=COARSE_COLOR, markersize=4)
+    ax_low.plot(*zip(*low_fine), "o-", label="smart: fine", color=FINE_COLOR, markersize=4)
     ax_low.set_title("Low side (1500us -> down)")
     ax_low.set_xlabel("pulse (us)")
     ax_low.set_ylabel("position (centideg)")
@@ -100,8 +108,9 @@ def main():
     ax_low.legend()
     ax_low.grid(True, alpha=0.3)
 
-    ax_high.plot(*zip(*naive_high), "o-", label="naive", color="#1f77b4", markersize=3)
-    ax_high.plot(*zip(*smart_high), "o-", label="smart (coarse+fine)", color="#d62728", markersize=3)
+    ax_high.plot(*zip(*naive_high), "o-", label="naive", color=NAIVE_COLOR, markersize=3)
+    ax_high.plot(*zip(*high_coarse), "o-", label="smart: coarse", color=COARSE_COLOR, markersize=4)
+    ax_high.plot(*zip(*high_fine), "o-", label="smart: fine", color=FINE_COLOR, markersize=4)
     ax_high.set_title("High side (1500us -> up)")
     ax_high.set_xlabel("pulse (us)")
     ax_high.set_ylabel("position (centideg)")
