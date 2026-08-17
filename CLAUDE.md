@@ -460,63 +460,91 @@ not curated the way `historical-data/` is.
 
 Built into `study_range.py` as a third phase after the fine sweep (see
 `ServoDAQ/README.md` for the full mechanics: direction-averaged ground
-truth, `build_table()`/`angle_to_pulse()`, the randomized-target-angle
-methodology). Unlike the original plan, this validates against **real
+truth, `build_table()`/`angle_to_pulse()`). Validates against **real
 hardware, live**, not just a residual against the ground-truth curve:
-every trial picks one random target angle, computes each model's
-predicted pulse for it, physically commands it, and measures the actual
-resulting angle. Ran for 3 hours unattended (1s rest after every move —
-explicit request after a servo died from exactly this kind of
-unattended stress before; every predicted pulse clamped to
-`[min_pulse_us, max_pulse_us]` regardless of what the interpolation
-computed), stamp `20260817-005841`: 1411 rounds, 8466 real trials, 6
-models (`linear2` + `table10/20/30/40/50`) tested against the same
-random target angle each round, model order shuffled per round to avoid
-biasing any one model with leftover backlash from whichever move
-happened right before it.
+every trial picks a target angle, computes a model's predicted pulse for
+it, physically commands it, and measures the actual resulting angle.
+
+**First run (stamp `20260817-005841`, since superseded — see below)**
+paired one target angle with all 6 models per round, shuffling model
+order within the round. This was a real methodological flaw: 5 of 6
+moves per round ended up as ~3µs nudges between nearly-identical
+predicted pulses (all 6 models predicting close together for the same
+angle) — too small to decisively re-engage the servo's mechanism,
+letting real backlash/deadband play show up as scatter unrelated to any
+model's actual accuracy. Worse, whenever `linear2` wasn't first in a
+round, the servo was already sitting near the *good* answer because a
+table model had just moved there chasing the same target — quietly
+flattering the naive baseline. Caught by direct diagnosis, not
+assumption: mean\|err\| by position-in-round climbed 0.315°→0.402°
+across positions 2–6 while jump *distance* alone showed no correlation
+with error at all, and signed error stayed ~0 at every position (ruling
+out a directional bias) — the signature of growing scatter from
+near-zero-delta moves, not a big-jump settling problem.
+
+**Fix**: `run_accuracy_test()` now decouples target angle and model
+completely — every trial is fully independent (its own random angle
+*and* its own independently-chosen model, drawn from a shuffled bag that
+refills on empty so sample counts stay balanced), so every move is a
+genuine, decisive jump. Re-ran 3 hours unattended, same safety measures
+(1s rest after every move, every pulse clamped to
+`[min_pulse_us, max_pulse_us]`), stamp `20260817-114844`: 6493
+independent trials (~1082/model).
 
 | model | points | mean\|err\| | median\|err\| | p90\|err\| | max\|err\| | rms |
 |---|---|---|---|---|---|---|
-| linear2 | 2 | 0.476° | 0.405° | 0.932° | 2.191° | 0.603° |
-| table10 | 10 | 0.358° | 0.270° | 0.762° | 2.805° | 0.479° |
-| table20 | 20 | 0.344° | 0.261° | 0.735° | 2.342° | 0.455° |
-| table30 | 30 | 0.338° | 0.264° | 0.728° | 2.245° | 0.441° |
-| table40 | 40 | 0.349° | 0.271° | 0.756° | 2.075° | 0.454° |
-| table50 | 50 | 0.343° | 0.276° | 0.718° | 2.003° | 0.441° |
+| linear2 | 2 | 0.938° | 0.865° | 1.822° | 3.896° | 1.131° |
+| table10 | 10 | 0.344° | 0.264° | 0.691° | 2.572° | 0.476° |
+| table20 | 20 | 0.338° | 0.252° | 0.670° | 2.594° | 0.488° |
+| table30 | 30 | 0.339° | 0.256° | 0.658° | 2.992° | 0.479° |
+| table40 | 40 | 0.319° | 0.250° | 0.617° | 2.671° | 0.443° |
+| table50 | 50 | 0.312° | 0.247° | 0.596° | 2.427° | 0.427° |
 
-**Any lookup table beats the naive 2-point assumption by a real,
-consistent margin** — mean error drops ~25–29% (0.48°→0.34-0.36°),
-median drops ~33-35% (0.41°→0.26-0.28°), RMS drops ~20-27%, across every
-table size tested, not just the largest one.
+**The corrected margin is much larger than first measured**: mean error
+drops ~63–67% (0.94°→0.31-0.34°), median ~69-71%, RMS ~58-62%, across
+every table size — the flawed run had reported only ~25-29%/~33-
+35%/~20-27%. `linear2`'s real error also isn't uniform: it climbs
+steeply toward one end of the range (angle-decile means ~0.37°→~1.87°
+peak) — the textbook signature of a straight line failing where the real
+curve bows away from it — while even `table10` stays roughly flat
+(~0.28-0.46°) across the whole range. `linear2` was never actually
+competitive; the flawed methodology just hid it by letting it borrow
+better models' positioning within a shared round.
 
-**Diminishing returns past ~20-30 points** — table20/30/40/50 all
-cluster tightly together (mean 0.338-0.349°, rms 0.441-0.455°); going
-from 20 to 50 points buys essentially nothing further on this servo.
-`table30` has the best mean+rms, `table50` the best max — differences
-between them are within noise. This is a real, useful data point: this
-project's existing 20-point convention (`ServoCalibrationTable.h`, used
-elsewhere in this repo) isn't undersized for a servo like this one.
+**Diminishing returns past ~20-30 points still holds.** `table20`
+through `table50` cluster within ~0.03° of each other on mean error;
+`table50` edges out the others on every metric this run, but the gap to
+`table20` is within noise. This project's existing 20-point convention
+(`ServoCalibrationTable.h`, used elsewhere in this repo) isn't undersized
+for a servo like this one.
 
-**One counterintuitive, honestly-reported result**: `table10`'s max
-error (2.805°) is worse than `linear2`'s (2.191°), even though `table10`
-wins on every other metric (mean, median, p90, rms). A coarser table can
-locally interpolate worse than a straight line if a breakpoint lands
-badly relative to a local kink — not a bug, a real property of
-piecewise-linear interpolation with too few points, visible here because
-1411 real samples is enough to actually catch it. Spot-checked the worst
-rows directly (trial 902, target 144.855°, table10 predicted 1700µs,
-landed at 147.66° — a real 2.8° miss, not a data artifact: pulse in
-range, no repeat of the stall-recovery corruption from earlier this
-session, which produced errors three orders of magnitude larger).
+**A methodological lesson, not a servo finding**: the flawed run's one
+"counterintuitive" result — `table10`'s max error beating `linear2`'s —
+didn't survive the fix. In the corrected run `linear2` has the worst max
+of *all six* models. Max is a single-extreme statistic over ~1082
+samples; noisy enough to flip entirely once a real measurement bias was
+removed. Don't trust a surprising max comparison until it replicates.
 
-Raw trials: `ServoDAQ/data/accuracy_trials_20260817-005841.csv` (8466
-rows, untracked, still on disk). Per-model summary:
-`accuracy_summary_20260817-005841.csv`.
+Two small follow-up fixes, same day: the accuracy CSV now writes angle
+columns in plain degrees (`target_angle_deg`/`actual_angle_deg`/
+`error_deg`) instead of centidegrees — this file has no downstream
+reader in the codebase, so there's no interoperability reason to match
+the rest of the project's centideg convention, and degrees reads far
+easier raw. And every output filename now carries `motor_type`/`unit`
+(plain integers, `type<N>_unit<M>_<timestamp>_*.csv`) ahead of the
+planned real 8-servo study — see `ServoDAQ/MOTOR_TYPES.md` for the
+actual inventory (type 1: Miuzei 25kg Servo ×2, type 2: knockoff MG996R
+×3, type 3: MG90D ×3). `type0`/`unit0` is reserved for unlabeled/test
+runs when those args are omitted.
 
-**Not yet done**: the same run on the other 7 servos (`study_range.py`
-is written to run identically — same code path, same phases, same
-thresholds — across all of them; only port and accuracy-hours differ
-between invocations).
+Raw trials for the corrected run: `ServoDAQ/data/accuracy_trials_20260817-114844.csv`
+(6493 rows, untracked, still on disk at time of writing). Per-model
+summary: `accuracy_summary_20260817-114844.csv`.
+
+**Not yet done**: the same run on the other 7 servos in `MOTOR_TYPES.md`
+(`study_range.py` is written to run identically across all of them —
+same code path, same phases, same thresholds; only port,
+accuracy-hours, and motor_type/unit differ between invocations).
 
 ## Requirements & dependencies
 
