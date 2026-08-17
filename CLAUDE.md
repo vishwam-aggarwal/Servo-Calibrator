@@ -456,34 +456,67 @@ regenerated per session, still on disk locally) and this file are.
 original ServoDAQ commit) — CSV/PNG outputs are regenerated per session,
 not curated the way `historical-data/` is.
 
-### Planned next step: N-point table accuracy vs. the naive 2-point assumption
+### N-point table accuracy vs. the naive 2-point assumption (2026-08-17)
 
-Not yet built — the next thing to do with this tooling. Uses the
-5µs-resolution fine sweep as ground truth (no new hardware time needed,
-it's already captured — reuse `fine_up_<stamp>.csv`/
-`fine_down_<stamp>.csv` from the most recent session rather than
-re-sweeping):
+Built into `study_range.py` as a third phase after the fine sweep (see
+`ServoDAQ/README.md` for the full mechanics: direction-averaged ground
+truth, `build_table()`/`angle_to_pulse()`, the randomized-target-angle
+methodology). Unlike the original plan, this validates against **real
+hardware, live**, not just a residual against the ground-truth curve:
+every trial picks one random target angle, computes each model's
+predicted pulse for it, physically commands it, and measures the actual
+resulting angle. Ran for 3 hours unattended (1s rest after every move —
+explicit request after a servo died from exactly this kind of
+unattended stress before; every predicted pulse clamped to
+`[min_pulse_us, max_pulse_us]` regardless of what the interpolation
+computed), stamp `20260817-005841`: 1411 rounds, 8466 real trials, 6
+models (`linear2` + `table10/20/30/40/50`) tested against the same
+random target angle each round, model order shuffled per round to avoid
+biasing any one model with leftover backlash from whichever move
+happened right before it.
 
-1. Direction-average the up/down fine sweep (same convention as
-   `ServoCalibrationTable.h`'s existing 20-point table — "direction-
-   averaged," see the top of this file) to get one ground-truth
-   pulse→angle curve at 5µs resolution.
-2. Build lookup tables at **10, 20, 30, 40, and 50 points**, evenly
-   spaced across the full range, each using the same binary-search +
-   linear-interpolation algorithm UMI's `lookupPulseUsFromTable()`/
-   `computeServoPulseUs()` use (so the comparison reflects what the real
-   tools actually do, not a reimplementation).
-3. For every N, and for the naive 2-point linear baseline (straight line
-   between measured min/max — what a plain formula assumes with no
-   table at all), compute predicted angle at every 5µs ground-truth
-   point and take the error against the real measured value: max, mean,
-   and RMS error across the whole range.
-4. Compare error-vs-N (10/20/30/40/50) against the 2-point baseline —
-   quantifies exactly how much table resolution buys over the naive
-   assumption on this servo's real measured nonlinearity, extending the
-   original `Servo_Auto_Calibrator` study (~3.6–3.8° max deviation from
-   a 2-point line, on a different servo) with real numbers on this one,
-   and at more than one table size.
+| model | points | mean\|err\| | median\|err\| | p90\|err\| | max\|err\| | rms |
+|---|---|---|---|---|---|---|
+| linear2 | 2 | 0.476° | 0.405° | 0.932° | 2.191° | 0.603° |
+| table10 | 10 | 0.358° | 0.270° | 0.762° | 2.805° | 0.479° |
+| table20 | 20 | 0.344° | 0.261° | 0.735° | 2.342° | 0.455° |
+| table30 | 30 | 0.338° | 0.264° | 0.728° | 2.245° | 0.441° |
+| table40 | 40 | 0.349° | 0.271° | 0.756° | 2.075° | 0.454° |
+| table50 | 50 | 0.343° | 0.276° | 0.718° | 2.003° | 0.441° |
+
+**Any lookup table beats the naive 2-point assumption by a real,
+consistent margin** — mean error drops ~25–29% (0.48°→0.34-0.36°),
+median drops ~33-35% (0.41°→0.26-0.28°), RMS drops ~20-27%, across every
+table size tested, not just the largest one.
+
+**Diminishing returns past ~20-30 points** — table20/30/40/50 all
+cluster tightly together (mean 0.338-0.349°, rms 0.441-0.455°); going
+from 20 to 50 points buys essentially nothing further on this servo.
+`table30` has the best mean+rms, `table50` the best max — differences
+between them are within noise. This is a real, useful data point: this
+project's existing 20-point convention (`ServoCalibrationTable.h`, used
+elsewhere in this repo) isn't undersized for a servo like this one.
+
+**One counterintuitive, honestly-reported result**: `table10`'s max
+error (2.805°) is worse than `linear2`'s (2.191°), even though `table10`
+wins on every other metric (mean, median, p90, rms). A coarser table can
+locally interpolate worse than a straight line if a breakpoint lands
+badly relative to a local kink — not a bug, a real property of
+piecewise-linear interpolation with too few points, visible here because
+1411 real samples is enough to actually catch it. Spot-checked the worst
+rows directly (trial 902, target 144.855°, table10 predicted 1700µs,
+landed at 147.66° — a real 2.8° miss, not a data artifact: pulse in
+range, no repeat of the stall-recovery corruption from earlier this
+session, which produced errors three orders of magnitude larger).
+
+Raw trials: `ServoDAQ/data/accuracy_trials_20260817-005841.csv` (8466
+rows, untracked, still on disk). Per-model summary:
+`accuracy_summary_20260817-005841.csv`.
+
+**Not yet done**: the same run on the other 7 servos (`study_range.py`
+is written to run identically — same code path, same phases, same
+thresholds — across all of them; only port and accuracy-hours differ
+between invocations).
 
 ## Requirements & dependencies
 
