@@ -8,8 +8,13 @@ servo_daq library -- an experiment that uses it, kept separate so the
 library stays reusable primitives and this stays "how we ran this
 particular study." Written to be run identically across multiple
 different servos (same code path, same thresholds, same phases every
-time) so results are comparable servo-to-servo -- only the port and the
-accuracy-test duration are meant to vary between runs.
+time) so results are comparable servo-to-servo -- only the port, the
+accuracy-test duration, and which physical unit is plugged in are meant
+to vary between runs. motor_type/unit (plain integers -- see
+../MOTOR_TYPES.md for what each number actually is) get folded into
+every output filename so results from the planned multi-servo study
+stay sortable/parseable later instead of just being a pile of
+timestamps with no way to tell which physical unit produced which file.
 
 Once find_range() has reliably located the real min/max (see
 ../README.md's investigation writeup for why "reliably" needed its own
@@ -26,8 +31,14 @@ Then, the accuracy test (see ../CLAUDE.md's "Planned next step" this
 implements): direction-averages the fine sweep into one ground-truth
 pulse->angle curve, builds a 2-point linear baseline and 10/20/30/40/50-
 point lookup tables from it (same binary-search + linear-interpolation
-algorithm the real embedded tools use), then repeatedly picks a random
-target angle, computes each model's predicted pulse for that angle,
+algorithm the real embedded tools use), then repeatedly picks a target
+angle AND a model *independently at random* (see run_accuracy_test()'s
+own docstring for why: an earlier version paired one target angle with
+all 6 models per round, which clustered 5 of 6 moves into ~3us nudges
+too small to decisively move the servo, letting real backlash/deadband
+scatter -- unrelated to any model's actual accuracy -- inflate every
+model's error roughly equally while swamping the finer differences
+between them), computes that model's predicted pulse for that angle,
 commands it, and measures the real resulting angle -- the actual
 end-to-end accuracy that matters (how close the servo lands to where you
 asked it to go), not just a curve-fit residual. Runs until a wall-clock
@@ -58,11 +69,15 @@ Position values are signed centidegrees (degrees x100) straight from the
 board -- already unwrapped/monotonic across turns by the firmware itself,
 no wrap correction needed here or in whatever plots this CSV later.
 
-Usage: python study_range.py [PORT] [ACCURACY_HOURS]
+Usage: python study_range.py [PORT] [ACCURACY_HOURS] [MOTOR_TYPE] [UNIT]
   PORT: defaults to COM9.
   ACCURACY_HOURS: wall-clock duration of the accuracy test. Defaults to
     0.25 (15min) -- deliberately short unless explicitly asked for more,
     so a routine run never silently turns into a multi-hour commitment.
+  MOTOR_TYPE / UNIT: plain integers identifying which physical servo
+    this run is characterizing -- see ../MOTOR_TYPES.md. Default to "0"
+    (unlabeled/test run) if omitted, with a warning printed -- always
+    pass real values for anything meant to be kept as study data.
 """
 
 import csv
@@ -84,7 +99,7 @@ FINE_STEP_US = 5
 TABLE_SIZES = {"linear2": 2, "table10": 10, "table20": 20, "table30": 30, "table40": 40, "table50": 50}
 MOVE_REST_S = 1.0              # deliberate rest after every move in the accuracy test -- see module docstring
 DEFAULT_ACCURACY_HOURS = 0.25  # ~15min default; pass a real duration explicitly for a long run
-PROGRESS_EVERY = 10            # print a progress line every N rounds
+PROGRESS_EVERY = 50            # print a progress line every N trials
 
 
 def save_csv(path, rows, header):
@@ -152,13 +167,35 @@ def angle_to_pulse(table, target_angle):
 
 
 def run_accuracy_test(link, ground_truth, min_us, max_us, hours, out_path, seed=None):
-    """Randomized end-to-end accuracy test. Each round: one random
-    target angle, tested against every model in random order (order
-    randomized per round so no model is systematically first/last --
-    avoids biasing any one model with leftover backlash from whichever
-    move happened right before it). Runs until `hours` wall-clock time
-    elapses; every row is flushed immediately, so an interrupted run
-    still leaves complete, usable data up to the last finished move."""
+    """Randomized end-to-end accuracy test. Every trial is fully
+    independent: its own random target angle AND its own independently-
+    chosen model -- no more testing all 6 models against one shared
+    target in a clustered round (see the investigation this replaced:
+    when models shared a target, 5 of 6 moves per round were ~3us nudges
+    between nearly-identical predicted pulses -- too small to decisively
+    re-engage the servo's mechanism, letting real backlash/deadband play
+    show up as growing, model-unrelated *scatter* that inflated every
+    model's absolute error roughly equally but swamped the finer,
+    between-model distinctions). Every move here is a genuine jump to a
+    fresh random angle, so there's no tiny-delta regime for that to hide
+    in. Model choice is drawn from a shuffled bag that's refilled each
+    time it empties (not plain independent random choice) so sample
+    counts stay balanced across models over the run, not just in
+    expectation.
+
+    Runs until `hours` wall-clock time elapses; every row (including a
+    wall-clock timestamp and how long that move's settle actually took)
+    is flushed immediately, so an interrupted run still leaves complete,
+    usable data up to the last finished move.
+
+    All internal math (table breakpoints, angle_to_pulse(), the target
+    draw, the error itself) stays in centidegrees, matching every other
+    number in this project (see servo_daq.py's own module comment) and
+    the ground_truth this function is handed. Only the CSV columns are
+    converted to plain degrees at the point of writing -- this file has
+    no downstream reader in the codebase (only ad hoc analysis), so
+    there's no interoperability reason to keep it in centidegrees, and
+    plain degrees is much easier to eyeball in a raw row."""
     rng = random.Random(seed)
     models = {name: build_table(ground_truth, n) for name, n in TABLE_SIZES.items()}
     min_angle, max_angle = ground_truth[0][1], ground_truth[-1][1]
@@ -166,29 +203,37 @@ def run_accuracy_test(link, ground_truth, min_us, max_us, hours, out_path, seed=
     start = time.time()
     deadline = start + hours * 3600
     trial = 0
+    model_bag = []
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["trial", "model", "target_angle_centideg", "predicted_pulse_us",
-                     "actual_pulse_us", "actual_angle_centideg", "error_centideg"])
+        w.writerow(["trial", "timestamp", "model", "target_angle_deg", "predicted_pulse_us",
+                     "actual_pulse_us", "actual_angle_deg", "error_deg", "settle_s"])
         while time.time() < deadline:
-            target_angle = rng.uniform(min_angle, max_angle)
-            order = list(models.keys())
-            rng.shuffle(order)
-            for name in order:
-                pulse = int(round(angle_to_pulse(models[name], target_angle)))
-                pulse = max(min_us, min(max_us, pulse))  # never trust interpolation alone -- clamp to the known-safe range
-                actual_pulse, actual_angle = link.move_to(pulse)
-                error = actual_angle - target_angle
-                w.writerow([trial, name, round(target_angle, 1), pulse,
-                             actual_pulse, actual_angle, round(error, 1)])
-                f.flush()
-                time.sleep(MOVE_REST_S)
+            if not model_bag:
+                model_bag = list(models.keys())
+                rng.shuffle(model_bag)
+            name = model_bag.pop()
+
+            target_angle = rng.uniform(min_angle, max_angle)  # centideg -- internal math unit
+            pulse = int(round(angle_to_pulse(models[name], target_angle)))
+            pulse = max(min_us, min(max_us, pulse))  # never trust interpolation alone -- clamp to the known-safe range
+
+            t0 = time.time()
+            actual_pulse, actual_angle = link.move_to(pulse)  # actual_angle: centideg, straight from the board
+            settle_s = time.time() - t0
+
+            error = actual_angle - target_angle  # still centideg here
+            w.writerow([trial, f"{time.time():.3f}", name, round(target_angle / 100, 3), pulse,
+                         actual_pulse, round(actual_angle / 100, 2), round(error / 100, 3), round(settle_s, 3)])
+            f.flush()
+            time.sleep(MOVE_REST_S)
+
             trial += 1
             if trial % PROGRESS_EVERY == 0:
                 elapsed_min = (time.time() - start) / 60
                 remaining_min = (deadline - time.time()) / 60
-                print(f"  round {trial}: {elapsed_min:.1f}min elapsed, ~{remaining_min:.1f}min remaining")
+                print(f"  trial {trial}: {elapsed_min:.1f}min elapsed, ~{remaining_min:.1f}min remaining")
     return trial
 
 
@@ -199,7 +244,7 @@ def summarize_accuracy(trials_path, summary_path):
     by_model = {}
     with open(trials_path, newline="") as f:
         for row in csv.DictReader(f):
-            by_model.setdefault(row["model"], []).append(float(row["error_centideg"]) / 100.0)
+            by_model.setdefault(row["model"], []).append(float(row["error_deg"]))
 
     rows = []
     for name in TABLE_SIZES:
@@ -218,7 +263,12 @@ def summarize_accuracy(trials_path, summary_path):
 def main():
     port = sys.argv[1] if len(sys.argv) > 1 else "COM9"
     accuracy_hours = float(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_ACCURACY_HOURS
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    motor_type = sys.argv[3] if len(sys.argv) > 3 else "0"
+    unit = sys.argv[4] if len(sys.argv) > 4 else "0"
+    if motor_type == "0" or unit == "0":
+        print("warning: motor_type/unit not given -- labeling this run type0_unit0 (unlabeled/test), "
+              "see MOTOR_TYPES.md for the real inventory numbers")
+    stamp = f"type{motor_type}_unit{unit}_{time.strftime('%Y%m%d-%H%M%S')}"
 
     with ServoDAQLink(port) as link:
         print(f"connecting to {port}...")
@@ -294,11 +344,11 @@ def main():
 
             accuracy_path = os.path.join(DATA_DIR, f"accuracy_trials_{stamp}.csv")
             accuracy_summary_path = os.path.join(DATA_DIR, f"accuracy_summary_{stamp}.csv")
-            print(f"accuracy test: {sorted(TABLE_SIZES.values())} models, random target angles, "
-                  f"{MOVE_REST_S}s rest/move, running for {accuracy_hours}h...")
+            print(f"accuracy test: {sorted(TABLE_SIZES.values())} models, independently random target angle "
+                  f"AND model per trial, {MOVE_REST_S}s rest/move, running for {accuracy_hours}h...")
             try:
                 n_trials = run_accuracy_test(link, ground_truth, min_us, max_us, accuracy_hours, accuracy_path)
-                print(f"  {n_trials} rounds x {len(TABLE_SIZES)} models completed")
+                print(f"  {n_trials} independent trials completed")
             except Exception as e:
                 print(f"\naccuracy test stopped early ({e}) -- summarizing whatever was captured")
 
