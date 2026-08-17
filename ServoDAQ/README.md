@@ -32,8 +32,12 @@ what "the edge" means, plotting — lives in `ServoDAQ_Host/`.
 - `servo_daq.py` — the library: `ServoDAQLink`, `sweep()`,
   `naive_stall_sweep()` (the dumb baseline), `find_range()`/`find_edge()`/
   `scan_until_weak()` (the coarse+fine rate-based algorithm).
-- `study_range.py` — runs naive vs. smart once, saves traces + a summary
-  CSV under `../data/`.
+- `study_range.py` — the full per-servo characterization pipeline, one
+  connection/session: naive sweep → smart `find_range()` → fine (5µs,
+  both directions) calibration sweep → N-point lookup-table accuracy
+  test (see below). Written to run identically across different servos
+  (same code path/phases/thresholds every time) — only the port and the
+  accuracy-test duration are meant to vary between invocations.
 - `plot_naive_vs_smart.py` — same comparison, but plots naive/coarse/fine
   as three separately colored traces (one connection/session, so the
   centideg reference is consistent across all of it).
@@ -141,3 +145,65 @@ much cumulative stall dwell time is required) isn't characterized —
 different runs triggered it with and without a deliberate extra pause.
 `find_range()`'s current safety margin against this is real (verified
 above) but not precisely measured.
+
+## N-point lookup-table accuracy test (2026-08-17)
+
+`study_range.py`'s third phase, once the fine (5µs) calibration sweep
+is captured: direction-averages the up/down sweep into one ground-truth
+pulse→angle curve, builds a 2-point linear baseline and 10/20/30/40/50-
+point lookup tables from it (`build_table()` — evenly spaced by pulse,
+each breakpoint snapped to an actually-measured grid point, not a
+fabricated interpolation), then validates against **real hardware**:
+repeatedly picks one random target angle, computes every model's
+predicted pulse for it via `angle_to_pulse()` (binary search + linear
+interpolation, same algorithm the real embedded tools use, run in the
+angle→pulse direction since that's the actual usage this validates),
+commands each in randomized order (so no model is systematically
+first/last and biased by leftover backlash from whichever move happened
+right before it), and measures the real resulting angle. This is the
+actual end-to-end accuracy that matters — how close the servo lands to
+where you asked it to go — not a synthetic curve-fit residual.
+
+Runs to a wall-clock deadline, not a fixed sample count, so a multi-hour
+run just works. Two explicit safety measures, both requested after a
+servo has died from exactly this kind of unattended extended-duration
+stress before: a 1-second rest after every single move, and every
+predicted pulse clamped to `[min_pulse_us, max_pulse_us]` regardless of
+what the interpolation computes — the test never drives the servo
+anywhere the fine sweep didn't already prove is safe. Data safety:
+phase-1 results are saved to disk *before* the accuracy test starts, and
+every trial row is flushed immediately, so a crash or interruption deep
+into an hours-long run never risks losing everything before it.
+
+**First real run** (stamp `20260817-005841`): 3 hours unattended, 1411
+rounds, 8466 real trials, one servo.
+
+| model | points | mean\|err\| | median\|err\| | p90\|err\| | max\|err\| | rms |
+|---|---|---|---|---|---|---|
+| linear2 | 2 | 0.476° | 0.405° | 0.932° | 2.191° | 0.603° |
+| table10 | 10 | 0.358° | 0.270° | 0.762° | 2.805° | 0.479° |
+| table20 | 20 | 0.344° | 0.261° | 0.735° | 2.342° | 0.455° |
+| table30 | 30 | 0.338° | 0.264° | 0.728° | 2.245° | 0.441° |
+| table40 | 40 | 0.349° | 0.271° | 0.756° | 2.075° | 0.454° |
+| table50 | 50 | 0.343° | 0.276° | 0.718° | 2.003° | 0.441° |
+
+Any table beats the naive 2-point assumption by a real, consistent
+margin (mean ~25-29% lower, median ~33-35% lower, RMS ~20-27% lower,
+across every table size — not just the largest). Diminishing returns
+past ~20-30 points — table20/30/40/50 cluster tightly together, and
+going from 20 to 50 points buys essentially nothing further on this
+servo, consistent with this project's existing 20-point convention not
+being undersized for a servo like this one. One honestly-reported
+counterintuitive result: `table10`'s max error (2.805°) is worse than
+`linear2`'s (2.191°) even though it wins on every other metric — a
+coarser table can locally interpolate worse than a straight line if a
+breakpoint lands badly relative to a local kink; spot-checked directly
+(trial 902, target 144.855° → landed at 147.66°, pulse in range, no
+resemblance to the stall-recovery corruption above, which produced
+errors three orders of magnitude larger) and it's real, not a data
+artifact.
+
+Raw data: `ServoDAQ/data/accuracy_trials_20260817-005841.csv` (8466
+rows) / `accuracy_summary_20260817-005841.csv` — both untracked, still
+on disk locally. Not yet done: the same run on the other 7 servos this
+tooling was built to test identically.
