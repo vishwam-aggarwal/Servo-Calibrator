@@ -371,6 +371,120 @@ firmware currently ships with **no** glitch/reject filtering; the
 anomaly itself is a known, open, unresolved observation, not something
 this session's firmware papers over.
 
+## ServoDAQ: a real stall-recovery backoff, not a bug (2026-08-16/17)
+
+A `find_range()` run against the same digital servo from the section
+above showed its low-side edge disagreeing with the naive sweep by
+~300° — reproducible, same magnitude, same side, every run. Chased
+through six ruled-out theories, each on direct evidence (unwrap
+algorithm bug — the transition is smooth over ~1.6–1.8s, not a single
+discontinuous jump; a stray AS5600 sample — too reproducible in
+magnitude/shape to be random; real horn rotation — watched directly, it
+didn't move; magnet/sensor mounting — fully reseated, anomaly unchanged;
+shared power supply; shared ground — both ruled out directly, separate
+regulated supply and star ground respectively), down to the real cause:
+**this digital servo runs its own internal stall/overcurrent
+protection.** Driven hard enough past its real mechanical limit for
+long enough, it deliberately repositions itself away from the stall —
+real, controlled, servo-executed motion (confirmed by directly watching
+it happen, and by a servo-disconnected control: zero drift with zero
+motor current, identical command sequence). Full blow-by-blow —
+including the two live-observation experiments that pinned this down —
+is written up in [`ServoDAQ/README.md`](ServoDAQ/README.md); this entry
+is the short version.
+
+`scan_until_weak()` (`servo_daq.py`) only ever checked for steps
+*smaller* than its self-measured reference rate (weakness) — no defense
+against a step that's backwards or implausibly large, so a coarse scan
+that outran the weakening detector (confirmed live: one real run walked
+350→300µs in a single 50µs step before anything looked wrong) would
+silently accept the backoff as a genuine edge. **Fix**: a step now also
+ends the scan — handled exactly like reaching a weak step, not raised as
+an error — when its delta reverses direction relative to the scan
+itself, past the same noise floor weakness already uses. No separate
+magnitude/"too-large" check and no fixed absolute-degree glitch filter
+— every backoff observed on real hardware was a reversal, never a
+same-direction overshoot, which is what "backing off from an
+over-extension" should physically look like; monotonicity alone turned
+out to be the real signature. `find_edge()` recovers through its
+existing fine-pass fallback automatically. Verified live both ways:
+`find_range()` now completes cleanly through a run that previously would
+have returned a corrupted low edge, with no false positive on the
+unaffected high side.
+
+**New host scripts** (`ServoDAQ_Host/`, all diagnostic, none touching
+firmware): `plot_naive_vs_smart.py` (now plots naive/coarse/fine as
+three separately colored traces instead of one merged "smart" line),
+`plot_full_range.py` (single combined-axis view with markers at
+`find_range()`'s reported min/max), `probe_low_jump.py`/
+`hand_stall_test.py`/`watch_full_swing_jump.py`/`full_test_record.py`
+(the investigation scripts that isolated and confirmed the root cause —
+the last one records a continuous pulse-vs-time + angle-vs-time timeline
+across a whole multi-phase sequence, stitching per-phase `CAP` bursts
+onto one clock).
+
+**`study_range.py` now also runs a fine calibration sweep**, once
+`find_range()` has reliably located the real min/max: plain `sweep()`
+(no stall detection needed — the range is already established safe) at
+5µs steps across the full range, in both directions (min→max, then
+max→min), saved as `fine_up_<stamp>.csv`/`fine_down_<stamp>.csv`. Doing
+both directions separately (rather than one round trip) isolates
+direction-dependent backlash from angle-dependent nonlinearity, same
+reasoning as `historical-data/hysteresis_data.csv` from the project this
+repo grew out of. On the servo tested (2026-08-17 session, stamp
+`20260817-002340`): 347 points/direction, 233.1° measured stroke,
+backlash consistently **negative across every shared point** (never
+crosses zero) — down reads 0.92° higher than up on average, peaking at
+1.66° near 1430µs. A one-signed offset like that is real mechanical
+backlash, not sensor scatter. The same run also now saves the smart
+algorithm's own coarse/fine sub-traces (`smart_coarse_low/high_*.csv`,
+`smart_fine_low/high_*.csv`), so one connection/session produces every
+trace needed to plot naive vs. coarse vs. fine vs. the fine calibration
+sweep together, all on the same centideg zero reference. (Reminder:
+opening the serial port resets the board and re-zeros that reference —
+CSVs from *different* sessions are on different, incomparable zero
+references. Don't combine across stamps.)
+
+A results page (charts built from that session's CSVs — naive vs.
+coarse vs. fine with min/max markers, the up/down fine sweep, and the
+hysteresis delta) was published as a private Claude artifact,
+["Servo Bench Readout"](https://claude.ai/code/artifact/8c7a669a-15ba-4ec8-bfe8-f2d6076e6e5b).
+Not the source of truth — the CSVs under `ServoDAQ/data/` (untracked,
+regenerated per session, still on disk locally) and this file are.
+
+`ServoDAQ/data/` remains untracked (never has been, even for the
+original ServoDAQ commit) — CSV/PNG outputs are regenerated per session,
+not curated the way `historical-data/` is.
+
+### Planned next step: N-point table accuracy vs. the naive 2-point assumption
+
+Not yet built — the next thing to do with this tooling. Uses the
+5µs-resolution fine sweep as ground truth (no new hardware time needed,
+it's already captured — reuse `fine_up_<stamp>.csv`/
+`fine_down_<stamp>.csv` from the most recent session rather than
+re-sweeping):
+
+1. Direction-average the up/down fine sweep (same convention as
+   `ServoCalibrationTable.h`'s existing 20-point table — "direction-
+   averaged," see the top of this file) to get one ground-truth
+   pulse→angle curve at 5µs resolution.
+2. Build lookup tables at **10, 20, 30, 40, and 50 points**, evenly
+   spaced across the full range, each using the same binary-search +
+   linear-interpolation algorithm UMI's `lookupPulseUsFromTable()`/
+   `computeServoPulseUs()` use (so the comparison reflects what the real
+   tools actually do, not a reimplementation).
+3. For every N, and for the naive 2-point linear baseline (straight line
+   between measured min/max — what a plain formula assumes with no
+   table at all), compute predicted angle at every 5µs ground-truth
+   point and take the error against the real measured value: max, mean,
+   and RMS error across the whole range.
+4. Compare error-vs-N (10/20/30/40/50) against the 2-point baseline —
+   quantifies exactly how much table resolution buys over the naive
+   assumption on this servo's real measured nonlinearity, extending the
+   original `Servo_Auto_Calibrator` study (~3.6–3.8° max deviation from
+   a 2-point line, on a different servo) with real numbers on this one,
+   and at more than one table size.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
