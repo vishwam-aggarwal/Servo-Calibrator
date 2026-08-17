@@ -318,6 +318,59 @@ queue — each fix so far has closed one specific way that can happen
 (overlapping commands; boot-time garbage) rather than the queue itself
 being made robust to it in general.
 
+## ServoDAQ: a separate bench-characterization tool (2026-08-16)
+
+`ServoDAQ/` is a **second, unrelated tool** in this repo — a companion
+firmware (`ServoDAQ_Companion/ServoDAQ_Companion.ino`) plus a Python host
+driver (`ServoDAQ_Host/servo_daq.py`, `study_range.py`), not the
+Web-Serial browser app described above. It exists for one-off bench
+characterization/article-testing work (comparing a naive stall-detection
+sweep against a smarter rate-based `find_range()`, on real hardware) and
+is deliberately kept out of `ServoCalibrator.html`/`ServoCalibrator_Companion`
+— that tool stays untouched; this kind of exploratory work goes in its
+own files instead.
+
+Protocol: `PING`, `US <pulseUs>` (write + block until settled, reply
+`OK <pulseUs> <position>`), `CAP <pulseUs> <delayMs>` (diagnostic raw
+step-response capture, streamed). No zero reference, no model — that's
+the host's job, same philosophy as `ServoCalibrator_Companion`.
+
+### Multi-turn position tracking added, wire format switched to centidegrees
+
+The board originally reported the AS5600's raw 0–4095 count directly.
+Per explicit direction, this was replaced with on-device multi-turn
+tracking: `updatePositionTracking()` in the `.ino` is the only place
+anything reads the encoder, runs first every tick (before any
+mode-specific logic), and folds each new raw sample against the
+previous one — a same-direction jump bigger than half a revolution
+(2048 counts) between two consecutive samples is treated as a wrap and
+credited to a signed lap counter (`turnCount`) rather than mistaken for
+real motion. This is safe because tick() samples at 200Hz (5ms) and
+CAP samples even faster — no hobby servo can complete a full revolution
+between two consecutive samples at that rate. Position is reported as
+signed centidegrees (degrees×100) — `n=2` chosen because the AS5600's
+native resolution is ~8.79 centidegrees/count, so centidegrees resolve
+~8.8× finer than the sensor's own quantization without adding fake
+precision, and match the `angleCentideg` convention already used
+elsewhere in this project. `US`'s and `CAP`'s reply formats both
+changed accordingly; `servo_daq.py`'s old `wrapped_delta_counts()`/
+`unwrap_trace()` host-side wrap-correction helpers were deleted since
+the board's own values are already monotonic — a plain subtraction is
+now always the true delta.
+
+A first real hardware run surfaced a large single-step jump in the
+naive low-side sweep, right near this servo's low mechanical limit —
+the same physical unit with previously-documented (see the
+`ServoCalibrator_Companion` history above) sit-then-snap behavior near
+its travel limits. A `REJECT_THRESHOLD_COUNTS` glitch filter (mirroring
+that earlier fix's `REJECT_THRESHOLD_DEG`) was added to investigate,
+but this was **not requested** and the user already has testing showing
+it isn't needed here — reverted back to the plain wrap-only logic above
+(confirmed byte-identical compile size to before the detour). The
+firmware currently ships with **no** glitch/reject filtering; the
+anomaly itself is a known, open, unresolved observation, not something
+this session's firmware papers over.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
