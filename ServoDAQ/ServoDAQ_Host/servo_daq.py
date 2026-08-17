@@ -158,8 +158,9 @@ def naive_stall_sweep(link, start_us, step_us, direction, stall_threshold=round(
 COARSE_STEP_US     = 50
 FINE_STEP_US       = 5
 REFERENCE_STEPS    = 5      # initial steps used to establish each scan's own baseline rate
-WEAKENING_FRACTION = 0.35   # a step counts as "weak" below this fraction of the reference rate
-RATE_WINDOW        = 1      # trigger on the first weak step, not a sustained run -- see scan_until_weak()'s own comment
+WEAKENING_FRACTION = 0.35   # a step counts as "weak" below this fraction of the reference rate;
+                             # also the noise floor for the reversal check below (see scan_until_weak())
+RATE_WINDOW        = 1      # trigger on the first weak/reversed step, not a sustained run -- see scan_until_weak()'s own comment
 MARGIN_US          = 100    # fixed gap before the fine pass starts, decoupled from COARSE_STEP_US -- the real transition
                              # zone measured only ~20us wide (350->330us), well under one 50us coarse step, so a coarse
                              # step can straddle the whole thing and register as unusually LARGE, not weak; backing up
@@ -171,22 +172,36 @@ def scan_until_weak(link, start_us, step_us, direction,
                      rate_window=RATE_WINDOW, floor_us=ABS_FLOOR_US, ceil_us=ABS_CEIL_US):
     """Steps from start_us in `direction` by step_us. Once `reference_steps`
     steps have been taken, their average delta becomes this scan's
-    baseline rate; every step after that is compared against it. The
-    first step whose delta falls below `weakening_fraction` of the
-    baseline (sustained for `rate_window` consecutive steps, default 1 --
-    real data showed the weak step immediately followed by the big
-    transition itself, so a longer run would miss it) ends the scan.
+    baseline rate; every step after that is compared against it. The scan
+    ends (sustained for `rate_window` consecutive steps, default 1 -- real
+    data showed the weak/reversed step immediately followed by the big
+    transition itself, so a longer run would miss it) as soon as a step is
+    either:
+      - weak: |delta| below `weakening_fraction` of the reference rate, or
+      - reversed: delta's sign contradicts `direction`, and it's not just
+        noise (same weakening_fraction floor, so an ordinary +-1 count
+        jitter while genuinely stopped never counts).
+    A real servo response only ever continues (or stalls) in the commanded
+    direction; a non-trivial reversal means something else happened -- a
+    digital servo's own internal stall-protection backoff moving the shaft
+    back toward safety, observed directly on real hardware (see
+    full_test_record.py's investigation) always as a reversal, never a
+    same-direction overshoot, which is exactly what "backing off from an
+    over-extension" should look like. Both checks are purely relative to
+    the reference rate this scan measured for itself -- no fixed absolute
+    degree/centideg number.
 
-    Returns ((edge_pulse, edge_centideg), trace, reference_rate). The
-    edge reported is the LAST point reached via a normal-strength step --
-    one point *before* the step that revealed the weakness, since that
-    step's own destination is already on the far side of it. reference_rate
-    is in centidegrees/step -- a ratio against it (weakening_fraction) is
-    what actually drives detection, so no unit conversion needed here.
+    Returns ((edge_pulse, edge_centideg), trace, reference_rate). The edge
+    reported is the LAST point reached via a normal step -- one point
+    *before* the step that revealed weakness/reversal, since that step's
+    own destination is already on the far side of it. Treating a reversal
+    exactly like reaching the edge (rather than raising) means find_edge()
+    recovers from it automatically via its existing fine-pass fallback --
+    no special handling needed by callers.
 
-    Raises RuntimeError if the hard pulse bound is hit first -- a real
-    anomaly (bad wiring/power, or the bound too tight for this servo),
-    not something to silently continue past.
+    Raises RuntimeError only if the hard pulse bound is hit first -- a
+    real anomaly (bad wiring/power, or the bound too tight for this
+    servo), not something to silently continue past.
     """
     trace = []
     pulse = start_us
@@ -195,7 +210,7 @@ def scan_until_weak(link, start_us, step_us, direction,
 
     reference_deltas = []
     reference_rate = None
-    weak_streak = 0
+    end_streak = 0
 
     while True:
         pulse += direction * step_us
@@ -203,20 +218,24 @@ def scan_until_weak(link, start_us, step_us, direction,
             raise RuntimeError(f"hit hard bound ({floor_us}..{ceil_us}) without finding the limit")
 
         _, centideg = link.move_to(pulse)
-        delta = abs(centideg - prev_centideg)   # plain subtraction -- already unwrapped
+        signed_delta = centideg - prev_centideg   # plain subtraction -- already unwrapped
+        delta = abs(signed_delta)
         trace.append((pulse, centideg))
 
         if reference_rate is None:
             reference_deltas.append(delta)
             if len(reference_deltas) >= reference_steps:
                 reference_rate = sum(reference_deltas) / len(reference_deltas)
-        elif delta < weakening_fraction * reference_rate:
-            weak_streak += 1
-            if weak_streak >= rate_window:
-                edge_index = len(trace) - rate_window - 1   # one point before the run of weak steps started
-                return trace[edge_index], trace, reference_rate
         else:
-            weak_streak = 0
+            weak = delta < weakening_fraction * reference_rate
+            reversed_ = (not weak) and (signed_delta > 0) != (direction > 0)
+            if weak or reversed_:
+                end_streak += 1
+                if end_streak >= rate_window:
+                    edge_index = len(trace) - rate_window - 1   # one point before the run started
+                    return trace[edge_index], trace, reference_rate
+            else:
+                end_streak = 0
 
         prev_centideg = centideg
 
