@@ -11,8 +11,9 @@ happen to end.
 Reads the most recent naive_low/high, smart_coarse_low/high,
 smart_fine_low/high, and summary CSVs already saved under ../data/ by
 plot_naive_vs_smart.py -- no hardware access, just a different view of
-data already captured in one connection/session (so the centideg
-reference is consistent across all of it).
+data already captured in one connection/session (so the position
+reference is consistent across all of it). Those CSVs store angle in
+plain degrees (see plot_naive_vs_smart.py's to_deg_trace()).
 
 Usage: python plot_full_range.py [STAMP]
   STAMP: e.g. 20260817-000142. Defaults to the most recent set found.
@@ -31,7 +32,7 @@ def load_csv(path):
     with open(path, newline="") as f:
         r = csv.reader(f)
         next(r)
-        return [(int(a), int(b)) for a, b in r]
+        return [(int(a), float(b)) for a, b in r]
 
 
 def find_stamp():
@@ -60,12 +61,12 @@ def main():
     with open(p("summary"), newline="") as f:
         r = csv.DictReader(f)
         for row in r:
-            summary[(row["method"], row["side"])] = (int(row["pulse_us"]), int(row["centideg"]))
+            summary[(row["method"], row["side"])] = (int(row["pulse_us"]), float(row["angle_deg"]))
 
-    min_pulse, min_centideg = summary[("smart", "low")]
-    max_pulse, max_centideg = summary[("smart", "high")]
-    print(f"smart min: {min_pulse}us ({min_centideg} centideg)")
-    print(f"smart max: {max_pulse}us ({max_centideg} centideg)")
+    min_pulse, min_deg = summary[("smart", "low")]
+    max_pulse, max_deg = summary[("smart", "high")]
+    print(f"smart min: {min_pulse}us ({min_deg} deg)")
+    print(f"smart max: {max_pulse}us ({max_deg} deg)")
 
     import matplotlib
     matplotlib.use("Agg")
@@ -87,18 +88,18 @@ def main():
 
     # Clear markers at find_range()'s own reported min/max -- the actual
     # decision, not just wherever the raw traces happen to stop.
-    for pulse, centideg, label in [(min_pulse, min_centideg, "min"), (max_pulse, max_centideg, "max")]:
-        ax.plot(pulse, centideg, marker="*", markersize=26, color="black",
+    for pulse, deg, label in [(min_pulse, min_deg, "min"), (max_pulse, max_deg, "max")]:
+        ax.plot(pulse, deg, marker="*", markersize=26, color="black",
                  markerfacecolor="gold", markeredgewidth=1.5, zorder=5)
         ax.annotate(
-            f"{label}\n{pulse}us\n{centideg} centideg",
-            xy=(pulse, centideg), xytext=(0, 22 if label == "min" else -55),
+            f"{label}\n{pulse}us\n{deg}deg",
+            xy=(pulse, deg), xytext=(0, 22 if label == "min" else -55),
             textcoords="offset points", ha="center", fontsize=9, fontweight="bold",
             bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="black", alpha=0.9),
         )
 
     ax.set_xlabel("pulse (us)")
-    ax.set_ylabel("position (centideg)")
+    ax.set_ylabel("position (deg)")
     ax.set_title(f"Full range: naive vs smart coarse/fine, with find_range()'s reported min/max\n(stamp {stamp})")
     ax.legend(loc="upper left")
     ax.grid(True, alpha=0.3)

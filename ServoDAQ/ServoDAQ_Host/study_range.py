@@ -65,9 +65,14 @@ is safe, however the interpolation math resolves. The whole run is
 wrapped in try/finally so the servo returns to CENTER_US on any error,
 not left sitting at an extreme position.
 
-Position values are signed centidegrees (degrees x100) straight from the
-board -- already unwrapped/monotonic across turns by the firmware itself,
-no wrap correction needed here or in whatever plots this CSV later.
+Position values from the board are signed centidegrees (degrees x100),
+already unwrapped/monotonic across turns by the firmware itself -- no wrap
+correction needed here or in whatever plots this data later. All internal
+math stays in that unit, but every CSV this script writes (traces,
+summary, and the accuracy test's own output) converts to plain degrees at
+the point of writing (see to_deg_trace()) -- easier to eyeball raw and
+consistent across every file this pipeline produces, not just the
+accuracy test's.
 
 Usage: python study_range.py [PORT] [ACCURACY_HOURS] [MOTOR_TYPE] [UNIT]
   PORT: defaults to COM9.
@@ -108,6 +113,15 @@ def save_csv(path, rows, header):
         w = csv.writer(f)
         w.writerow(header)
         w.writerows(rows)
+
+
+def to_deg_trace(trace):
+    """[(pulse_us, centideg), ...] -> [(pulse_us, angle_deg), ...] for CSV
+    output only -- all internal math (ground truth, tables, accuracy test)
+    stays in centidegrees, same as every other value in this project; only
+    the values actually written to a CSV get converted, matching the
+    convention run_accuracy_test() already established for its own output."""
+    return [(pulse, round(centideg / 100.0, 2)) for pulse, centideg in trace]
 
 
 def build_ground_truth(fine_up, fine_down):
@@ -320,20 +334,20 @@ def main():
             fine_edge_low_path = os.path.join(DATA_DIR, f"smart_fine_low_{stamp}.csv")
             fine_edge_high_path = os.path.join(DATA_DIR, f"smart_fine_high_{stamp}.csv")
 
-            save_csv(low_path, low_trace, ["pulse_us", "centideg"])
-            save_csv(high_path, high_trace, ["pulse_us", "centideg"])
-            save_csv(fine_up_path, fine_up, ["pulse_us", "centideg"])
-            save_csv(fine_down_path, fine_down, ["pulse_us", "centideg"])
-            save_csv(coarse_low_path, smart["low_coarse_trace"], ["pulse_us", "centideg"])
-            save_csv(coarse_high_path, smart["high_coarse_trace"], ["pulse_us", "centideg"])
-            save_csv(fine_edge_low_path, smart["low_fine_trace"], ["pulse_us", "centideg"])
-            save_csv(fine_edge_high_path, smart["high_fine_trace"], ["pulse_us", "centideg"])
+            save_csv(low_path, to_deg_trace(low_trace), ["pulse_us", "angle_deg"])
+            save_csv(high_path, to_deg_trace(high_trace), ["pulse_us", "angle_deg"])
+            save_csv(fine_up_path, to_deg_trace(fine_up), ["pulse_us", "angle_deg"])
+            save_csv(fine_down_path, to_deg_trace(fine_down), ["pulse_us", "angle_deg"])
+            save_csv(coarse_low_path, to_deg_trace(smart["low_coarse_trace"]), ["pulse_us", "angle_deg"])
+            save_csv(coarse_high_path, to_deg_trace(smart["high_coarse_trace"]), ["pulse_us", "angle_deg"])
+            save_csv(fine_edge_low_path, to_deg_trace(smart["low_fine_trace"]), ["pulse_us", "angle_deg"])
+            save_csv(fine_edge_high_path, to_deg_trace(smart["high_fine_trace"]), ["pulse_us", "angle_deg"])
             save_csv(summary_path, [
-                ["naive", "low", low_edge[0], low_edge[1]],
-                ["naive", "high", high_edge[0], high_edge[1]],
-                ["smart", "low", min_us, smart["min_centideg"]],
-                ["smart", "high", max_us, smart["max_centideg"]],
-            ], ["method", "side", "pulse_us", "centideg"])
+                ["naive", "low", low_edge[0], round(low_edge[1] / 100.0, 2)],
+                ["naive", "high", high_edge[0], round(high_edge[1] / 100.0, 2)],
+                ["smart", "low", min_us, round(smart["min_centideg"] / 100.0, 2)],
+                ["smart", "high", max_us, round(smart["max_centideg"] / 100.0, 2)],
+            ], ["method", "side", "pulse_us", "angle_deg"])
             print(f"\nphase 1 saved:\n  {low_path}\n  {high_path}\n  {coarse_low_path}\n  {coarse_high_path}\n"
                   f"  {fine_edge_low_path}\n  {fine_edge_high_path}\n  {fine_up_path}\n  {fine_down_path}\n"
                   f"  {summary_path}")

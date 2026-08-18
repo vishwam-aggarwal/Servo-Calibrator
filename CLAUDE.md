@@ -546,6 +546,42 @@ summary: `accuracy_summary_20260817-114844.csv`.
 same code path, same phases, same thresholds; only port,
 accuracy-hours, and motor_type/unit differ between invocations).
 
+### Degrees in every sweep/calibration CSV, and a lost type1_unit1 run (2026-08-17)
+
+A laptop crash killed an in-progress `study_range.py` run for
+`type1_unit1` (stamp `20260817-152410`) partway through its accuracy
+phase — the accuracy CSV itself was well-formed up to the last flushed
+row (the per-row `flush()` documented in `study_range.py`'s own
+docstring did its job), but the run never reached its planned duration,
+so the whole stamp's output (naive/smart/fine/summary/accuracy — all
+untracked under `ServoDAQ/data/`) was discarded rather than kept as a
+partial result.
+
+Before restarting that run, extended the previous session's "degrees,
+not centidegrees, in the accuracy CSV" fix (see `ServoDAQ/README.md`'s
+"Two small follow-ups" entry) to **every** CSV `study_range.py` and
+`plot_naive_vs_smart.py` write — `naive_low/high`, `fine_up/down`,
+`smart_coarse/fine_low/high`, and `summary` now all carry an `angle_deg`
+column instead of raw `centideg`, plus the same conversion in the
+one-off investigation scripts' capture CSVs
+(`probe_low_jump.py`/`hand_stall_test.py`/`watch_full_swing_jump.py`/
+`full_test_record.py`). `plot_full_range.py` (the only script that
+re-reads these CSVs rather than plotting from live in-memory data) was
+updated to read the new column and relabel its plot accordingly. Same
+convention as before: internal math (ground truth, tables, stall/rate
+thresholds) stays in centidegrees throughout — only the values actually
+written to a CSV get converted, at the point of writing. Purely a
+Python-side change; the firmware and its wire protocol are untouched
+(still centidegrees). Done proactively, before generating any more
+data, specifically so future CSVs never need a retroactive/after-the-
+fact unit correction the way the accuracy CSV alone did previously.
+
+Also added a repo-specific `wrap-up` skill
+(`.claude/skills/wrap-up/SKILL.md`) codifying this repo's actual
+end-of-session sequence (docs → branch → commit/push → PR → merge →
+memory, each done only if not already done) after doing that sequence
+by hand enough times to be worth writing down.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
