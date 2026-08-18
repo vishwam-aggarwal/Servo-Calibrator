@@ -125,8 +125,8 @@ def main():
         trace_path = os.path.join(DATA_DIR, f"full_test_trace_{stamp}.csv")
         with open(trace_path, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["t_ms", "centideg"])
-            w.writerows([(round(t, 1), c) for t, c in trace])
+            w.writerow(["t_ms", "angle_deg"])
+            w.writerows([(round(t, 1), round(c / 100.0, 2)) for t, c in trace])
         print(f"saved: {trace_path}")
 
         pulse_path = os.path.join(DATA_DIR, f"full_test_pulse_{stamp}.csv")
