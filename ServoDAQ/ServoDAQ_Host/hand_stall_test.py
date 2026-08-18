@@ -86,8 +86,8 @@ def main():
         csv_path = os.path.join(DATA_DIR, f"hand_stall_{stamp}.csv")
         with open(csv_path, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["t_ms", "centideg"])
-            w.writerows(samples)
+            w.writerow(["t_ms", "angle_deg"])
+            w.writerows([(t, round(c / 100.0, 2)) for t, c in samples])
         print(f"saved: {csv_path}")
 
         import matplotlib
