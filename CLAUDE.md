@@ -582,6 +582,33 @@ end-of-session sequence (docs → branch → commit/push → PR → merge →
 memory, each done only if not already done) after doing that sequence
 by hand enough times to be worth writing down.
 
+### First unit of the multi-servo study: type1_unit1 (2026-08-17)
+
+Restarted after the crash above, on the now-all-degrees CSVs: full
+`study_range.py` run against `type1_unit1` (Miuzei 25kg Servo, first of
+2 units — see `ServoDAQ/MOTOR_TYPES.md`), 3h accuracy phase, 6482
+independent trials, stamp `20260817-170727`. Range: 345–2080µs,
+-38.76° to 194.06° (~232.8° stroke).
+
+| model | points | mean\|err\| | max\|err\| | rms |
+|---|---|---|---|---|
+| linear2 | 2 | 1.085° | 4.488° | 1.220° |
+| table10 | 10 | 0.391° | 2.748° | 0.531° |
+| table20 | 20 | 0.334° | 2.504° | 0.459° |
+| table30 | 30 | 0.335° | 2.694° | 0.477° |
+| table40 | 40 | 0.293° | 2.413° | 0.413° |
+| table50 | 50 | 0.305° | 2.375° | 0.433° |
+
+Same shape as the earlier reference run in `ServoDAQ/README.md`:
+`linear2` clearly worst (~3x every table model's mean error), and
+diminishing returns past ~10-20 points hold again — `table20` is
+already within noise of `table50`. First real data point toward the
+planned 8-unit study; 7 units remain (`type1_unit2`, `type2_unit1-3`,
+`type3_unit1-3`). Raw data:
+`ServoDAQ/data/accuracy_trials_type1_unit1_20260817-170727.csv` (6482
+rows) / `accuracy_summary_type1_unit1_20260817-170727.csv`, both
+untracked.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
