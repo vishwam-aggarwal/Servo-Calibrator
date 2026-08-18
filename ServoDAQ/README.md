@@ -253,3 +253,36 @@ Raw data: `ServoDAQ/data/accuracy_trials_20260817-114844.csv` (6493
 rows) / `accuracy_summary_20260817-114844.csv` — both untracked, still
 on disk locally at time of writing. Not yet done: the same run on the
 other 7 servos in `MOTOR_TYPES.md`.
+
+### Degrees in every CSV, not just the accuracy one (2026-08-17)
+
+The "degrees, not centidegrees" fix above only ever touched the
+accuracy-trials CSV. A later `type1_unit1` run crashed (laptop failure)
+partway through its accuracy phase; that stamp's data was discarded
+(the accuracy CSV was itself well-formed up to its last flushed row —
+the crash just meant the run never reached its planned duration, not
+that anything was corrupted) rather than kept as a partial result.
+
+Before restarting, extended the same fix to every other CSV
+`study_range.py` writes — `naive_low/high`, `fine_up/down`,
+`smart_coarse/fine_low/high`, and `summary` all now carry `angle_deg`
+instead of raw `centideg`, matching the accuracy CSV's own convention.
+`plot_naive_vs_smart.py` (which duplicates the same phase-1 CSV writes
+for standalone naive-vs-smart runs) got the identical fix.
+`plot_full_range.py` — the one script that re-reads these CSVs from
+disk instead of plotting from live in-memory data — was updated to read
+the new column and relabel its axes/annotations. The four one-off
+investigation scripts' raw capture CSVs
+(`probe_low_jump.py`/`hand_stall_test.py`/`watch_full_swing_jump.py`/
+`full_test_record.py`) got the same treatment for consistency, though
+their in-memory-plotted PNGs are unaffected (still centideg, since
+those plot straight from the captured trace, never reloading the CSV).
+
+Internal math is untouched everywhere — ground truth, tables, and every
+stall/rate threshold still work in centidegrees, same as before; only
+the value actually written to a CSV row gets converted, at the point of
+writing (`to_deg_trace()` in both `study_range.py` and
+`plot_naive_vs_smart.py`). Purely a Python-side change: the firmware
+and its wire protocol are untouched. Applied proactively, before
+generating any more data, so no future CSV needs a retroactive
+unit correction the way the accuracy CSV alone did previously.

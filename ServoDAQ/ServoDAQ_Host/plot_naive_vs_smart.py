@@ -14,7 +14,7 @@ behavior is visible directly, not just its combined result.
 Position reference note: opening the serial port resets the board (DTR),
 which re-zeros ServoDAQ_Companion's multi-turn tracking from wherever the
 horn happens to sit at boot. That reference is only consistent *within
-one connection* -- comparing centideg values across two separate runs
+one connection* -- comparing position values across two separate runs
 (two separate `with ServoDAQLink(...)` connections) is comparing two
 different zero points, not a real discrepancy. That's why this script
 does NOT reuse the previous run's naive_*.csv files (as an earlier
@@ -42,6 +42,14 @@ def save_csv(path, rows, header):
         w = csv.writer(f)
         w.writerow(header)
         w.writerows(rows)
+
+
+def to_deg_trace(trace):
+    """[(pulse_us, centideg), ...] -> [(pulse_us, angle_deg), ...] for CSV
+    output only -- matches study_range.py's own convention (see that
+    file's to_deg_trace()); the in-memory traces used for plotting below
+    stay in centidegrees, unaffected."""
+    return [(pulse, round(centideg / 100.0, 2)) for pulse, centideg in trace]
 
 
 def main():
@@ -76,18 +84,18 @@ def main():
     low_coarse, low_fine = smart["low_coarse_trace"], smart["low_fine_trace"]
     high_coarse, high_fine = smart["high_coarse_trace"], smart["high_fine_trace"]
 
-    save_csv(os.path.join(DATA_DIR, f"naive_low_{stamp}.csv"), naive_low, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"naive_high_{stamp}.csv"), naive_high, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"smart_coarse_low_{stamp}.csv"), low_coarse, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"smart_fine_low_{stamp}.csv"), low_fine, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"smart_coarse_high_{stamp}.csv"), high_coarse, ["pulse_us", "centideg"])
-    save_csv(os.path.join(DATA_DIR, f"smart_fine_high_{stamp}.csv"), high_fine, ["pulse_us", "centideg"])
+    save_csv(os.path.join(DATA_DIR, f"naive_low_{stamp}.csv"), to_deg_trace(naive_low), ["pulse_us", "angle_deg"])
+    save_csv(os.path.join(DATA_DIR, f"naive_high_{stamp}.csv"), to_deg_trace(naive_high), ["pulse_us", "angle_deg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_coarse_low_{stamp}.csv"), to_deg_trace(low_coarse), ["pulse_us", "angle_deg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_fine_low_{stamp}.csv"), to_deg_trace(low_fine), ["pulse_us", "angle_deg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_coarse_high_{stamp}.csv"), to_deg_trace(high_coarse), ["pulse_us", "angle_deg"])
+    save_csv(os.path.join(DATA_DIR, f"smart_fine_high_{stamp}.csv"), to_deg_trace(high_fine), ["pulse_us", "angle_deg"])
     save_csv(os.path.join(DATA_DIR, f"summary_{stamp}.csv"), [
-        ["naive", "low", low_edge[0], low_edge[1]],
-        ["naive", "high", high_edge[0], high_edge[1]],
-        ["smart", "low", smart["min_pulse_us"], smart["min_centideg"]],
-        ["smart", "high", smart["max_pulse_us"], smart["max_centideg"]],
-    ], ["method", "side", "pulse_us", "centideg"])
+        ["naive", "low", low_edge[0], round(low_edge[1] / 100.0, 2)],
+        ["naive", "high", high_edge[0], round(high_edge[1] / 100.0, 2)],
+        ["smart", "low", smart["min_pulse_us"], round(smart["min_centideg"] / 100.0, 2)],
+        ["smart", "high", smart["max_pulse_us"], round(smart["max_centideg"] / 100.0, 2)],
+    ], ["method", "side", "pulse_us", "angle_deg"])
     print(f"saved traces + summary under {DATA_DIR} (stamp {stamp})")
 
     import matplotlib
