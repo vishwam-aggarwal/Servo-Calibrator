@@ -286,3 +286,43 @@ writing (`to_deg_trace()` in both `study_range.py` and
 and its wire protocol are untouched. Applied proactively, before
 generating any more data, so no future CSV needs a retroactive
 unit correction the way the accuracy CSV alone did previously.
+
+### First real unit of the 8-servo study: type1_unit1 (2026-08-17)
+
+Restarted the crashed run above on the now-fully-degrees CSVs: full
+`study_range.py COM9 3 1 1` against `type1_unit1` (Miuzei 25kg Servo,
+first of 2 units of that type — see `MOTOR_TYPES.md`). Completed
+cleanly, no errors, servo returned to center. Stamp
+`20260817-170727`.
+
+Phase 1: naive low edge 310µs, naive high edge 2100µs; smart (real)
+range 345–2080µs, -38.76° to 194.06° — a ~232.8° stroke, in the same
+ballpark as the wide-range digital servo characterized earlier in this
+file, though a different physical unit/model.
+
+Phase 2 (accuracy test, 3h, 6482 independent trials):
+
+| model | points | n | mean\|err\| | max\|err\| | rms |
+|---|---|---|---|---|---|
+| linear2 | 2 | 1081 | 1.0847° | 4.4880° | 1.2196° |
+| table10 | 10 | 1080 | 0.3906° | 2.7480° | 0.5305° |
+| table20 | 20 | 1080 | 0.3342° | 2.5040° | 0.4590° |
+| table30 | 30 | 1081 | 0.3348° | 2.6940° | 0.4765° |
+| table40 | 40 | 1080 | 0.2932° | 2.4130° | 0.4134° |
+| table50 | 50 | 1080 | 0.3048° | 2.3750° | 0.4325° |
+
+(`summarize_accuracy()` only ever computed mean/max/rms — no median —
+same columns as every other run's summary CSV, unchanged by this run.)
+The same qualitative picture as the reference run above holds on this
+unit too: `linear2`'s mean error
+is ~3x any table model's, and returns diminish sharply past ~10-20
+points — `table20` sits within noise of `table50` on every metric here.
+Nothing in this first unit contradicts the reference run's conclusions;
+it reads as a second, independent confirmation on different physical
+hardware rather than a new finding.
+
+Raw data: `ServoDAQ/data/accuracy_trials_type1_unit1_20260817-170727.csv`
+(6482 rows) / `accuracy_summary_type1_unit1_20260817-170727.csv`, both
+untracked, still on disk locally at time of writing. **Remaining**: 7
+more units — `type1_unit2`, `type2_unit1` through `unit3`, `type3_unit1`
+through `unit3`.
