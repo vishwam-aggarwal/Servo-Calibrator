@@ -609,6 +609,88 @@ planned 8-unit study; 7 units remain (`type1_unit2`, `type2_unit1-3`,
 rows) / `accuracy_summary_type1_unit1_20260817-170727.csv`, both
 untracked.
 
+`type1_unit2`'s own full 3h run (stamp `20260818-161957`) hit an
+unrelated mid-run `PermissionError` on the serial port at trial 3100
+(~86.5min in) — transient USB/driver drop, not a firmware/algorithm
+issue, servo recovered fine once reconnected. Partial data (523-524
+samples/model) is still on disk but the full run hasn't been redone;
+`type1_unit2` isn't yet a completed unit of the study.
+
+## ServoDAQ: a servo that spins a full turn instead of stalling, and the settle-report bug that hid it (2026-08-18)
+
+First `study_range.py` run against `type3_unit1` (MG90D) made the
+servo visibly spin continuously instead of behaving like every servo
+tested so far. Root cause, found by looking at the actual data rather
+than guessing, took two real fixes:
+
+**1. The firmware was lying about settling.** `reportSettled()` in
+`ServoDAQ_Companion.ino` sent an identical `OK <pulseUs> <centideg>`
+reply whether the shaft genuinely converged (`SETTLE_DWELL_TICKS` of
+sustained low deltas) or `SETTLE_TIMEOUT_MS` (3s) elapsed without that
+ever happening — the host had no way to tell a real settle from a
+timed-out, possibly-still-moving reading. Fixed: the timeout case now
+replies `ERR NOT_SETTLED <pulseUs> <centideg>` instead. Verified via
+`arduino-cli compile`/`upload` and real hardware.
+
+**2. Once that was visible, the real behavior turned out not to be a
+sensor glitch.** First guess (a stray AS5600 read corrupting the
+wrap-safe accumulator, the same failure class documented below in
+"Multi-turn position tracking") didn't survive scrutiny: the observed
+jump magnitudes (e.g. -1246.91°, -2572.73°, -10852.65°) aren't
+integer multiples of 360° the way a miscounted-wrap origin would
+require, and the implied angular rate (~415°/s) is far below what
+would even engage the firmware's wrap-detection logic falsely. Real,
+continuous physical rotation, correctly tracked — not a misread.
+Running the actual production functions (`naive_stall_sweep`,
+`find_edge`) on real hardware showed this isn't rare either: 60-80% of
+attempts hit it, consistently in a narrow 250-270us band. A fully
+instrumented raw-curve probe (5us steps, no stopping logic) showed
+why: the response is smooth and consistent (~0.2-1.6°/step) right up
+to and including the step immediately before the failure — no gradual
+weakening to detect. Sweeping `WEAKENING_FRACTION` from 0.15 to 0.55
+confirmed it: every value failed at the same ~250-260us point, because
+there's no slope change in the data for any threshold to key off.
+Below that pulse, this servo takes the commanded target as a cue to
+spin the long way around instead of stalling — a discrete decision
+boundary, not continuous physics, and fundamentally undetectable by
+watching the slope of the pulses before it.
+
+**The fix**, since the edge can't be predicted in advance: make
+crossing it once, safely, part of the normal algorithm instead of an
+uncaught crash. `naive_stall_sweep()`/`scan_until_weak()`
+(`servo_daq.py`) now catch a `NotSettledError` from `move_to()` and
+treat it exactly like reaching the edge — report the last point
+actually reached normally, and stop, rather than taking a
+confirmatory step past a limit that's provably real. Recovering also
+corrects the position reference: `ServoDAQLink.recover_from_wrap()`
+moves to a pulse whose real position is already trusted and measures
+the actual drift rather than assuming a clean -360° (the magnitudes
+above prove that assumption would be wrong), folding the exact
+difference into a running `centideg_offset` applied transparently to
+every `move_to()` reading for the rest of the session. A first
+end-to-end test found a real gap in this: the immediate recovery point
+itself can *also* be past the (not perfectly repeatable) edge and fail
+the same way, so `recover_from_wrap()` now takes an ordered list of
+fallback candidates (nearest first, then the scan's own known-safe
+starting pulse) instead of a single point.
+
+Verified on real hardware: 10/10 trials (`naive_stall_sweep` +
+`find_edge`, 5x each) completed without raising, edges consistently
+found at the real 265-325us limit, and reported-position drift held
+under 4° across all 10 crossings (vs. spiraling past -12,000° 
+unguarded). A full `study_range.py` smoke test then ran end-to-end
+clean, including through a real edge-crossing on the low side. This is
+a no-op for any servo that never triggers `NOT_SETTLED` (the offset
+stays exactly 0, the new exception handlers never execute) — confirmed
+by code inspection for `type1_unit1`/`type1_unit2`, not yet
+re-verified against their actual hardware.
+
+`type3_unit1` (MG90D) smoke-test results (stamp `20260818-191520`,
+0.25h/644 trials, ~107/model): range -72.6° to 168.7° (~241° stroke);
+same shape as every prior unit -- `linear2` mean 1.03°, table models
+0.47-0.56°, diminishing returns past ~10-20 points. Smoke test only,
+not a completed study unit yet.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`

@@ -47,6 +47,7 @@
     PING           -> OK PONG
 
     US <pulseUs>   -> OK <pulseUs> <centideg>
+                     | ERR NOT_SETTLED <pulseUs> <centideg>
                      | ERR OUT_OF_RANGE <floor>..<ceil>
                      | ERR USAGE
                      | ERR BUSY
@@ -54,9 +55,17 @@
       settling and replies once the tick loop confirms it (or times out).
       A second US sent before that reply arrives gets ERR BUSY -- one in
       flight at a time, never queued or overlapped.
-      centideg is the settled shaft position in centidegrees, signed,
-      relative to wherever the shaft was at boot (0) -- averaged over the
-      stable dwell window. Monotonic across turns: never wraps.
+      centideg (OK case) is the settled shaft position in centidegrees,
+      signed, relative to wherever the shaft was at boot (0) -- averaged
+      over the stable dwell window. Monotonic across turns: never wraps.
+      NOT_SETTLED means SETTLE_TIMEOUT_MS elapsed without
+      SETTLE_DWELL_TICKS of consecutive <=SETTLE_DELTA_COUNTS deltas ever
+      being observed -- centideg here is just the single last raw
+      reading, not a genuinely stable value, and the shaft may still be
+      moving when this reply arrives. Previously reported as a plain OK
+      indistinguishable from a real settle; see the file's own history
+      for why that was a real bug for a servo with nothing to settle
+      against.
 
     CAP <pulseUs> <delayMs>
                    -> CAPSTART <pulseUs>
@@ -195,18 +204,29 @@ unsigned long settleStartMs = 0;
 unsigned long nextTickMs = 0;
 long prevTickTotal = 0;          // totalCounts as of the previous tick, for settle-delta comparison
 
-// Reports the settled value (or, on timeout, the last total) and
-// returns to idle. Averaging is a plain integer mean of totalCounts --
-// no wraparound correction needed, totalCounts is already continuous
-// even across a stable window that straddles a lap boundary.
+// Reports the settled value, or -- if SETTLE_TIMEOUT_MS elapsed without
+// ever actually settling -- an ERR instead of a fake OK. lastTotal in
+// the timeout case is just whatever the single last raw reading was,
+// not a genuinely stable value, and the shaft may still be moving right
+// now; reporting it as an error (not success) is the whole fix -- a
+// caller that only ever checked reply[0]=="OK" now correctly sees a
+// failure instead of silently treating an unsettled reading as real
+// data (see this command's protocol comment for the full reasoning).
 void reportSettled(long lastTotal, bool converged) {
-  long total = converged ? (settleSum / settleStableCount) : lastTotal;
+  if (!converged) {
+    Serial.print(F("ERR NOT_SETTLED "));
+    Serial.print(targetPulseUs);
+    Serial.print(' ');
+    Serial.println(countsToCentideg(lastTotal));
+    mode = MODE_IDLE;
+    return;
+  }
   // Fine to print directly here: AVR's Serial has a 64-byte TX buffer
   // and this reply is ~16 bytes, so it won't block the tick loop.
   Serial.print(F("OK "));
   Serial.print(targetPulseUs);
   Serial.print(' ');
-  Serial.println(countsToCentideg(total));
+  Serial.println(countsToCentideg(settleSum / settleStableCount));
   mode = MODE_IDLE;
 }
 
