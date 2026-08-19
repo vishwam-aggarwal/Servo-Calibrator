@@ -421,7 +421,12 @@ three separately colored traces instead of one merged "smart" line),
 (the investigation scripts that isolated and confirmed the root cause —
 the last one records a continuous pulse-vs-time + angle-vs-time timeline
 across a whole multi-phase sequence, stitching per-phase `CAP` bursts
-onto one clock).
+onto one clock). Those four one-off investigation scripts were deleted
+2026-08-19, once their findings were fully captured in this file and
+`ServoDAQ/README.md` — ad hoc debugging tools for a specific
+already-resolved question, not part of the standard `study_range.py`
+procedure; still recoverable from git history if a similar question
+ever comes up again.
 
 **`study_range.py` now also runs a fine calibration sweep**, once
 `find_range()` has reliably located the real min/max: plain `sweep()`
