@@ -50,8 +50,10 @@ what "the edge" means, plotting — lives in `ServoDAQ_Host/`.
   markers at `find_range()`'s reported min/max.
 - `probe_low_jump.py`, `hand_stall_test.py`, `watch_full_swing_jump.py`,
   `full_test_record.py` — the diagnostic scripts written for the
-  investigation below; kept as they're generally useful for digging into
-  a specific servo's step response, not one-shot throwaways.
+  investigation below. Deleted 2026-08-19 once their findings were fully
+  captured here and in `CLAUDE.md`: ad hoc debugging tools for that
+  specific, already-resolved question, not part of the standard
+  `study_range.py` procedure. Still recoverable from git history.
 
 `../data/` holds whatever a given run saved (CSVs + PNGs) — regenerated
 each session, not version-controlled.
