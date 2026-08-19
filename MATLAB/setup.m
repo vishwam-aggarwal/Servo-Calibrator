@@ -23,12 +23,30 @@ addpath(matlabDir);   % so MotorTypeData resolves regardless of the current fold
 addpath(dataDir);     % forced every call, not just "if not already on path"
 
 motors = loadMotorData(dataDir);
+motors = attachTypeNames(motors);
 
 fprintf('setup: %d motor type(s), %d unit(s) total\n', ...
     numel(motors), sum(arrayfun(@(m) numel(m.Units), motors)));
 for i = 1:numel(motors)
-    fprintf('  type%d: unit%s\n', motors(i).TypeNumber, ...
+    label = sprintf('type%d', motors(i).TypeNumber);
+    if ~isempty(motors(i).TypeName)
+        label = sprintf('%s (type%d)', motors(i).TypeName, motors(i).TypeNumber);
+    end
+    fprintf('  %s: unit%s\n', label, ...
         strjoin(arrayfun(@(u) string(u.UnitNumber), motors(i).Units), ', '));
+end
+
+function motors = attachTypeNames(motors)
+    %ATTACHTYPENAMES  Fills in TypeName from motorTypeNames.m wherever
+    %   that lookup has an entry for a type actually present -- a type
+    %   with no entry (e.g. type0/unlabeled runs) just keeps TypeName
+    %   as '', not a placeholder guess.
+    names = motorTypeNames();
+    for i = 1:numel(motors)
+        if isKey(names, motors(i).TypeNumber)
+            motors(i).TypeName = names(motors(i).TypeNumber);
+        end
+    end
 end
 
 function motors = loadMotorData(dataDir)
