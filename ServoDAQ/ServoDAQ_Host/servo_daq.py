@@ -26,6 +26,21 @@ ABS_FLOOR_US = 80
 ABS_CEIL_US  = 3100
 
 
+class NotSettledError(RuntimeError):
+    """US reported ERR NOT_SETTLED: SETTLE_TIMEOUT_MS elapsed without the
+    shaft ever meeting the settle criterion. centideg here is just
+    whatever the last raw reading was, not a real position -- some
+    servos (see servo_daq.py's own history) take an unreachable pulse as
+    a cue to spin toward it the long way around instead of stalling, so
+    this pulse's own reading is never trustworthy. Carries pulse_us and
+    centideg (offset-corrected, same as move_to()'s return) purely for
+    diagnostics -- callers should not treat it as a real position."""
+    def __init__(self, pulse_us, centideg):
+        super().__init__(f"US {pulse_us} did not settle within the timeout (last reading {centideg} centideg)")
+        self.pulse_us = pulse_us
+        self.centideg = centideg
+
+
 class ServoDAQLink:
     """One serial connection to the board. Opening the port resets it
     (DTR, same as any Arduino serial terminal), so connect() waits for
@@ -34,6 +49,11 @@ class ServoDAQLink:
 
     def __init__(self, port, baud=115200, timeout=3.0):
         self.ser = serial.Serial(port, baud, timeout=timeout)
+        # See recover_from_wrap() -- corrects every centideg this link
+        # reports from here on, after a NotSettledError episode moved the
+        # shaft somewhere the wrap-safe accumulator didn't expect. Zero
+        # (a no-op) until that ever actually happens.
+        self.centideg_offset = 0
 
     def wait_ready(self, timeout=6.0):
         deadline = time.time() + timeout
@@ -63,16 +83,73 @@ class ServoDAQLink:
     def move_to(self, pulse_us):
         """US <pulseUs> -> (pulseUs, centideg). Blocks until the board
         reports settled. centideg is signed, unwrapped centidegrees --
-        see this module's docstring. Timeout here (5s) is deliberately
-        above the firmware's own SETTLE_TIMEOUT_MS (3s) -- a client
-        timeout shorter than the device's own worst case is exactly the
-        bug that caused a real command-desync problem elsewhere in this
-        project's history, not repeating that here."""
+        see this module's docstring -- plus centideg_offset (see
+        recover_from_wrap()), transparently, so every caller downstream
+        of a wrap-recovery just sees corrected values with no special
+        handling of their own. Timeout here (5s) is deliberately above
+        the firmware's own SETTLE_TIMEOUT_MS (3s) -- a client timeout
+        shorter than the device's own worst case is exactly the bug that
+        caused a real command-desync problem elsewhere in this project's
+        history, not repeating that here.
+
+        Raises NotSettledError (not a plain RuntimeError) specifically
+        for ERR NOT_SETTLED -- callers that need to treat "never settled"
+        as a real, expected outcome (not a wire-protocol failure) can
+        catch that distinctly; anything else not starting with OK
+        (OUT_OF_RANGE, USAGE, BUSY) is a genuine protocol-level error and
+        still raises plain RuntimeError."""
         reply = self.send_command(f"US {pulse_us}", timeout=5.0)
         parts = reply.split()
+        if parts[0] == "ERR" and len(parts) > 1 and parts[1] == "NOT_SETTLED":
+            raise NotSettledError(int(parts[2]), int(parts[3]) + self.centideg_offset)
         if parts[0] != "OK":
             raise RuntimeError(f"US {pulse_us} rejected: {reply}")
-        return int(parts[1]), int(parts[2])
+        return int(parts[1]), int(parts[2]) + self.centideg_offset
+
+    def recover_from_wrap(self, candidates):
+        """Call right after a NotSettledError to recenter onto a pulse
+        whose true position is already known, and correct
+        centideg_offset so every reading for the rest of this session is
+        back in a physically consistent frame.
+
+        `candidates` is an ordered list of (pulse_us, known_centideg)
+        fallback points, tried nearest/most-specific first. One point
+        isn't enough: real hardware showed the recovery move itself can
+        also hit NotSettledError -- the danger zone's edge isn't
+        perfectly repeatable run to run (observed anywhere from 250 to
+        270us across trials), so "the last good pulse from this walk"
+        isn't always reliably safe to return to on the very next
+        command. Each caller should pass at least one further-back point
+        it's confident is genuinely clear of the edge (e.g. this scan's
+        own starting pulse) as a fallback beyond the immediate one.
+        Raises the last NotSettledError if every candidate fails --
+        at that point something more serious is going on than this
+        function's job to paper over.
+
+        Deliberately does NOT assume the excursion was one clean 360deg
+        lap -- real measurements on hardware that actually does this
+        (spins toward an unreachable target instead of stalling) showed
+        excursions of very different, non-360-multiple sizes each time,
+        consistent with an unstable "confused" drive state rather than a
+        single deliberate rotation. So the correction is measured, not
+        assumed: move to a pulse whose real position we already trust,
+        see what the (still-uncorrected-for-this-event) tracker now
+        reports there, and fold the exact difference into
+        centideg_offset. self-correcting regardless of how large or
+        irregular the real excursion turned out to be, and costs nothing
+        extra -- recovering onto a known-good pulse is something the
+        caller needs to do anyway."""
+        last_err = None
+        for known_pulse_us, known_centideg in candidates:
+            try:
+                pulse_us, reported = self.move_to(known_pulse_us)
+            except NotSettledError as e:
+                last_err = e
+                continue
+            drift = reported - known_centideg
+            self.centideg_offset -= drift
+            return pulse_us, known_centideg
+        raise last_err
 
     def close(self):
         self.ser.close()
@@ -122,7 +199,21 @@ def naive_stall_sweep(link, start_us, step_us, direction, stall_threshold=round(
     step before," it just walks until the encoder stalls and calls that
     the limit). stall_threshold is in centidegrees; the default (~1 raw
     AS5600 count's worth) preserves the same real angular sensitivity the
-    old raw-count threshold had. Returns ((pulse, centideg), full_trace)."""
+    old raw-count threshold had. Returns ((pulse, centideg), full_trace).
+
+    A NotSettledError from move_to() is treated as reaching the edge, not
+    a real stall -- some servos take a pulse past their real limit as a
+    cue to spin toward it the long way around instead of stalling
+    (confirmed on real hardware: the response stays normal, no gradual
+    weakening, right up to and including the very last good step -- see
+    servo_daq.py's own history -- so this can't be predicted in advance
+    by any threshold on the *previous* step's delta; catching the actual
+    failure is the only reliable signal). The failing pulse's own
+    reading is never trusted -- the edge is the last point actually
+    reached normally -- and link.recover_from_wrap() corrects the
+    position reference before returning, so every reading after this
+    call (including whatever the caller does next in the same session)
+    is back in a physically consistent frame."""
     trace = []
     pulse = start_us
     _, prev_centideg = link.move_to(pulse)
@@ -132,7 +223,16 @@ def naive_stall_sweep(link, start_us, step_us, direction, stall_threshold=round(
         pulse += direction * step_us
         if pulse < floor_us or pulse > ceil_us:
             raise RuntimeError(f"hit hard bound ({floor_us}..{ceil_us}) without detecting a stall")
-        _, centideg = link.move_to(pulse)
+        try:
+            _, centideg = link.move_to(pulse)
+        except NotSettledError:
+            edge_pulse = pulse - direction * step_us   # last point actually reached normally
+            # edge_pulse first (nearest, likely still correct), start_us
+            # as a further-back fallback in case even edge_pulse isn't
+            # safe to return to right now -- see recover_from_wrap()'s
+            # own docstring for why one candidate isn't always enough.
+            link.recover_from_wrap([(edge_pulse, prev_centideg), (trace[0][0], trace[0][1])])
+            return (edge_pulse, prev_centideg), trace
         trace.append((pulse, centideg))
         if abs(centideg - prev_centideg) <= stall_threshold:   # plain subtraction -- already unwrapped
             return (pulse, centideg), trace
@@ -202,6 +302,20 @@ def scan_until_weak(link, start_us, step_us, direction,
     Raises RuntimeError only if the hard pulse bound is hit first -- a
     real anomaly (bad wiring/power, or the bound too tight for this
     servo), not something to silently continue past.
+
+    A NotSettledError from move_to() ends the scan the same way a
+    weak/reversed step does -- report the last point reached normally as
+    the edge -- but unconditionally, not gated behind rate_window or the
+    weakening_fraction threshold: a step that never settled isn't a rate
+    heuristic, it's confirmed proof this pulse isn't real position data
+    (some servos spin toward an unreachable target instead of stalling;
+    real hardware shows zero gradual precursor in the step *before* this
+    one, so no threshold on delta could ever catch it in advance -- see
+    servo_daq.py's own history). link.recover_from_wrap() corrects the
+    position reference onto the trusted last-good point before returning,
+    so a caller (e.g. find_edge()'s subsequent fine pass, or whatever
+    runs after this scan in the same session) sees consistent readings
+    afterward, not a phantom offset baked into everything.
     """
     trace = []
     pulse = start_us
@@ -217,7 +331,14 @@ def scan_until_weak(link, start_us, step_us, direction,
         if pulse < floor_us or pulse > ceil_us:
             raise RuntimeError(f"hit hard bound ({floor_us}..{ceil_us}) without finding the limit")
 
-        _, centideg = link.move_to(pulse)
+        try:
+            _, centideg = link.move_to(pulse)
+        except NotSettledError:
+            # trace[-1] first (nearest, likely still correct), trace[0]
+            # (this scan's own starting pulse) as a further-back fallback
+            # -- see recover_from_wrap()'s own docstring for why.
+            link.recover_from_wrap([trace[-1], trace[0]])
+            return trace[-1], trace, (reference_rate if reference_rate is not None else 0.0)
         signed_delta = centideg - prev_centideg   # plain subtraction -- already unwrapped
         delta = abs(signed_delta)
         trace.append((pulse, centideg))
