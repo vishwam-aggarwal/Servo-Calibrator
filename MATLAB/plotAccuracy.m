@@ -14,23 +14,69 @@ end
 
 function plotOneType(motorType, modelOrder)
     nUnits = numel(motorType.Units);
-    fig = figure('Name', sprintf('Type%d Accuracy Test', motorType.TypeNumber), ...
+    label = typeLabel(motorType.TypeNumber, motorType.TypeName);
+    fig = figure('Name', sprintf('%s Accuracy Test', label), ...
         'Color', 'w', 'Position', [100 100 520 * max(nUnits, 1) + 120, 760]);
     tl = tiledlayout(fig, 2, nUnits, 'TileSpacing', 'compact', 'Padding', 'compact');
-    title(tl, sprintf('Type %d — Table Accuracy Vs. Naive Linear2 Baseline', motorType.TypeNumber), ...
+    title(tl, sprintf('%s — Table Accuracy Vs. Naive Linear2 Baseline', label), ...
         'FontWeight', 'bold', 'FontSize', 13);
 
+    distAxes = gobjects(1, nUnits);
+    statsAxes = gobjects(1, nUnits);
     for i = 1:nUnits
-        nexttile(tl, i);
-        plotErrorDistribution(motorType.Units(i), motorType.TypeNumber, modelOrder);
-        nexttile(tl, nUnits + i);
-        plotSummaryStats(motorType.Units(i), motorType.TypeNumber, modelOrder);
+        distAxes(i) = nexttile(tl, i);
+        plotErrorDistribution(motorType.Units(i), motorType.TypeNumber, motorType.TypeName, modelOrder);
+        statsAxes(i) = nexttile(tl, nUnits + i);
+        plotSummaryStats(motorType.Units(i), motorType.TypeNumber, motorType.TypeName, modelOrder);
+    end
+    % Y only -- the x-axis on both rows is the categorical model list,
+    % already identical across units (MODEL_ORDER), nothing to sync.
+    syncAxes(distAxes, 'y');
+    syncAxes(statsAxes, 'y');
+end
+
+function syncAxes(axesHandles, whichAxis)
+    %SYNCAXES  Makes every axes in axesHandles share the same limits
+    %   along whichAxis ('x', 'y', or 'xy') -- the union of what each
+    %   would have auto-scaled to on its own, so units within one type's
+    %   figure are directly visually comparable instead of each silently
+    %   getting its own scale.
+    axesHandles = axesHandles(isgraphics(axesHandles));
+    if numel(axesHandles) < 2
+        return
+    end
+    if contains(whichAxis, 'x')
+        xl = cell2mat(get(axesHandles, {'XLim'}));
+        set(axesHandles, 'XLim', [min(xl(:, 1)), max(xl(:, 2))]);
+    end
+    if contains(whichAxis, 'y')
+        yl = cell2mat(get(axesHandles, {'YLim'}));
+        set(axesHandles, 'YLim', [min(yl(:, 1)), max(yl(:, 2))]);
     end
 end
 
-function plotErrorDistribution(unitData, typeNumber, modelOrder)
+function label = typeLabel(typeNumber, typeName)
+    %TYPELABEL  The resolved model name (e.g. "Miuzei 25kg Servo") when
+    %   setup.m found one via motorTypeNames.m -- "Type <N>" only as a
+    %   last resort when no name is registered for this type, since
+    %   there's genuinely nothing else to call it.
+    if isempty(typeName)
+        label = sprintf('Type %d', typeNumber);
+    else
+        label = typeName;
+    end
+end
+
+function label = unitLabel(typeNumber, typeName, unitNumber)
+    %UNITLABEL  "Miuzei 25kg Servo Unit 1" -- the name/type label plus
+    %   unit number, used everywhere a specific unit is identified on a
+    %   plot (never bare "type1 unit1").
+    label = sprintf('%s Unit %d', typeLabel(typeNumber, typeName), unitNumber);
+end
+
+function plotErrorDistribution(unitData, typeNumber, typeName, modelOrder)
     ax = gca;
-    titleStr = sprintf('Type%d Unit%d — Trial Error Distribution', typeNumber, unitData.UnitNumber);
+    titleStr = sprintf('%s — Trial Error Distribution', unitLabel(typeNumber, typeName, unitData.UnitNumber));
 
     if isempty(unitData.AccuracyTrials)
         emptyPanel(ax, titleStr, 'No Accuracy Trials Yet');
@@ -61,9 +107,9 @@ function plotErrorDistribution(unitData, typeNumber, modelOrder)
     subtitle(ax, sprintf('N = %d Trials', height(trials)));
 end
 
-function plotSummaryStats(unitData, typeNumber, modelOrder)
+function plotSummaryStats(unitData, typeNumber, typeName, modelOrder)
     ax = gca;
-    titleStr = sprintf('Type%d Unit%d — Summary Statistics', typeNumber, unitData.UnitNumber);
+    titleStr = sprintf('%s — Summary Statistics', unitLabel(typeNumber, typeName, unitData.UnitNumber));
 
     if isempty(unitData.AccuracySummary)
         emptyPanel(ax, titleStr, 'Accuracy Test Still Running — No Summary Yet');

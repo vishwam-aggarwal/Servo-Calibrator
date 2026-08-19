@@ -21,6 +21,10 @@ classdef MotorTypeData
     %   unit's data gets the same normalized frame automatically,
     %   instead of each plotting script recomputing its own.
     %
+    %   TypeName is the physical servo model (e.g. "Miuzei 25kg Servo"),
+    %   filled in by setup.m from motorTypeNames.m when that lookup has
+    %   an entry for this TypeNumber -- '' otherwise, never a guess.
+    %
     %   Example:
     %       motors = setup();
     %       t1 = motors([motors.TypeNumber] == 1);
@@ -29,6 +33,7 @@ classdef MotorTypeData
 
     properties
         TypeNumber
+        TypeName = ''
         Units
     end
 

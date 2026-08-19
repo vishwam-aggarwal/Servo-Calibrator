@@ -337,9 +337,9 @@ through `unit3`.
 mid-run `PermissionError` on the serial port at trial 3100 (~86.5min
 in) — a transient USB/driver drop (the port re-enumerated cleanly once
 the process died; reconnecting and recentering worked immediately), not
-a firmware or algorithm problem. Partial data (523-524 samples/model)
-is on disk but the run hasn't been redone yet, so `type1_unit2` isn't a
-completed unit of the study.
+a firmware or algorithm problem. That partial run's data (523-524
+samples/model) was discarded 2026-08-18 rather than kept; a clean full
+rerun (stamp `20260818-225108`) is in progress as of this writing.
 
 ## Investigation: a servo that spins a full turn instead of stalling, and the settle-report bug that hid it (2026-08-18)
 
@@ -445,3 +445,84 @@ samples/model): same shape as every prior unit — `linear2` mean
 1.03°, table models cluster 0.47-0.56°, diminishing returns past
 ~10-20 points. Smoke test only (15min default), not yet a completed
 study unit — the full 3h run is still to do.
+
+### type3_unit1's full study, completed clean (2026-08-18)
+
+Full 3h run (stamp `20260818-194150`) — the first real, complete run on
+the `NOT_SETTLED`-fixed firmware: 7766 independent trials, zero
+`NOT_SETTLED` events anywhere in the log, zero warnings, servo returned
+to center. Range 265-2075µs, -73.6° to 241.6° (~241.6° stroke).
+
+| model | points | n | mean\|err\| | max\|err\| | rms |
+|---|---|---|---|---|---|
+| linear2 | 2 | 1294 | 1.1274° | 3.3780° | 1.3672° |
+| table10 | 10 | 1294 | 0.6587° | 1.7160° | 0.7521° |
+| table20 | 20 | 1294 | 0.6225° | 1.7700° | 0.7226° |
+| table30 | 30 | 1295 | 0.6244° | 1.8380° | 0.7067° |
+| table40 | 40 | 1294 | 0.6024° | 1.7010° | 0.6827° |
+| table50 | 50 | 1295 | 0.6338° | 1.6720° | 0.7092° |
+
+Same shape as every other unit — `linear2` clearly worst, table models
+cluster with diminishing returns past ~10-20 points — but every number
+runs noticeably higher than `type1_unit1`'s (table models ~0.60-0.66°
+here vs. ~0.29-0.39° there). Cross-checked against the MATLAB
+toolkit's own slope analysis (see below): `type3_unit1`'s calibration
+curve has real, measurable waviness — RMS deviation from a straight
+line 0.854° vs. `type1_unit1`'s 0.595° — so even the table models have
+a less-linear curve to fit against. Second completed unit of the
+planned 8-unit study; 6 remain.
+
+## MATLAB analysis toolkit (2026-08-18/19)
+
+`MATLAB/` — a standalone visualization toolkit for the study's own
+output, built alongside the data collection itself. Not previously
+written up here despite existing since 2026-08-18; this is that
+write-up, folded in with the refinements made the following day.
+
+`setup.m` forces itself and `../data` onto the path, then parses every
+`study_range.py` CSV into one `MotorTypeData` object per motor type
+actually present on disk — type/unit counts discovered from filenames,
+never hardcoded, so it automatically picks up new units as the study
+progresses (and stays correct if a unit was studied more than once —
+most recent stamp wins, since a rerun supersedes an earlier
+partial/smoke run and different stamps sit on different, incomparable
+position references). Every `*angle_deg` column across every table is
+normalized once, here, so the identified min-pulse edge sits at 0° for
+every downstream script automatically. `motorTypeNames.m` is a small
+lookup mirroring `MOTOR_TYPES.md`'s inventory (type number -> physical
+model name); `setup.m` resolves it onto each unit, and every plot now
+names units by their actual model ("Miuzei 25kg Servo Unit 2"), never
+bare "type1 unit2" — "Type `<N>`" only survives as a last-resort
+fallback for a type with no lookup entry.
+
+Four standalone plotting scripts, each calling `setup()` itself:
+
+- `plotHardStops.m` — naive/coarse/fine range-finding overlay per
+  unit, min/max edges marked with leader-lined callout labels. Drops a
+  sweep's first-point outlier and any non-monotonic tail generically
+  (not per-unit/type) — real artifacts caught investigating this
+  session's `type1_unit1`/`type3_unit1` data: a stall-recovery backoff
+  and a one-off stale first reading, both logged rather than silently
+  discarded.
+- `plotCalibration.m` — up/down/average fine sweep with hysteresis
+  shading, a Savitzky-Golay-smoothed local-slope panel (raw
+  point-to-point differentiation was too noisy from AS5600 quantization
+  to show real bowing), and a zoomed view of the hysteresis band over a
+  fixed window anchored at each unit's own min pulse (the real band is
+  too thin to see at full-range scale).
+- `plotAccuracy.m` — per-trial error distribution (`boxchart`) plus
+  mean/RMS/max summary statistics per model.
+- `plotErrorVsAngle.m` — mean |error| by target-angle decile per
+  model, showing *where* in the range each model is worst rather than
+  only its aggregate error; caught real non-monotonic error patterns
+  (not a simple one-directional bow) that line up with the slope
+  panel's own waviness findings.
+
+Every legend uses `eastoutside`, not `best` — `best` let a legend box
+sit directly over a real trace once actual data (the error-vs-angle
+plot's `linear2` peak) made the axes large enough for that overlap to
+happen. Within one type's figure, every unit's axes now share
+identical scale via a shared `syncAxes()` helper (synced per-row where
+rows carry different measurements, e.g. calibration's curve/slope/zoom)
+so units are directly visually comparable instead of each silently
+auto-scaling to its own range.
