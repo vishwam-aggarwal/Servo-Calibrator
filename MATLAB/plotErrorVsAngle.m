@@ -1,38 +1,58 @@
-%PLOTERRORVSANGLE  One figure per motor type, one subplot per unit of
-%   that type: mean |error| vs. target angle, one line per model,
-%   binned into deciles across each unit's own angle range. The
-%   accuracy box plots (plotAccuracy.m) collapse every trial across the
-%   whole range into one distribution per model -- this instead shows
-%   WHERE in the range each model's error is worst, which a flat
-%   aggregate number hides (e.g. linear2's error climbing steeply
-%   toward one end because the real curve bows away from a straight
-%   line -- see CLAUDE.md's own decile finding). Calls setup() itself,
-%   so this runs standalone.
+%PLOTERRORVSANGLE  One figure total, every motor type stacked into the
+%   same tiledlayout (one row per type, one column per unit of that
+%   type): mean |error| vs. target angle, one line per model, binned
+%   into deciles across each unit's own angle range. The accuracy box
+%   plots (plotAccuracy.m) collapse every trial across the whole range
+%   into one distribution per model -- this instead shows WHERE in the
+%   range each model's error is worst, which a flat aggregate number
+%   hides (e.g. linear2's error climbing steeply toward one end because
+%   the real curve bows away from a straight line -- see CLAUDE.md's own
+%   decile finding). The y-axis (mean |error|) is synced across every
+%   panel in the figure -- every type, every unit -- for direct
+%   cross-type error comparison; the x-axis (target angle) stays synced
+%   per-type only, since different motor types have genuinely different
+%   angular ranges. Calls setup() itself, so this runs standalone.
 
 MODEL_ORDER = {'linear2', 'table10', 'table20', 'table30', 'table40', 'table50'};
 NUM_BINS = 10;   % deciles across each unit's own target-angle range
 
 setup;
 
-for t = 1:numel(motors)
-    plotOneType(motors(t), MODEL_ORDER, NUM_BINS);
+nTypes = numel(motors);
+nCols = max([1, arrayfun(@(m) numel(m.Units), motors)]);
+fig = figure('Name', 'All Motor Types — Error Vs. Angle', ...
+    'Color', 'w', 'Position', [50 50, 480 * nCols + 140, 480 * nTypes + 120]);
+tl = tiledlayout(fig, nTypes, nCols, 'TileSpacing', 'compact', 'Padding', 'compact');
+title(tl, 'Mean |Error| By Target Angle Decile — All Motor Types', ...
+    'FontWeight', 'bold', 'FontSize', 13);
+
+allAxes = gobjects(1, 0);
+for t = 1:nTypes
+    allAxes = [allAxes, plotOneType(tl, nCols, t, motors(t), MODEL_ORDER, NUM_BINS)]; %#ok<AGROW>
 end
+% Y synced across every type/unit in the figure -- mean |error| in
+% degrees is a comparable quantity everywhere, so one shared y-scale
+% makes cross-type/cross-unit error magnitude directly comparable. X
+% (target angle) stays per-type (done inside plotOneType below) since
+% different motor types have genuinely different angular ranges --
+% forcing every type onto the widest type's x-range would compress
+% narrower-range types into a sliver of their own panel.
+syncAxes(allAxes, 'y');
 
-function plotOneType(motorType, modelOrder, numBins)
+function axesHandles = plotOneType(tl, nCols, rowIdx, motorType, modelOrder, numBins)
+    % rowIdx is this type's (only) row within the shared tiledlayout --
+    % see plotHardStops.m's plotOneType for the same one-row-per-type
+    % pattern. Axes are returned (not y-synced here) so the caller can
+    % sync y across the whole figure once every type has been plotted;
+    % x is synced right here, per-type only.
     nUnits = numel(motorType.Units);
-    label = typeLabel(motorType.TypeNumber, motorType.TypeName);
-    fig = figure('Name', sprintf('%s Error Vs. Angle', label), ...
-        'Color', 'w', 'Position', [100 100 480 * max(nUnits, 1) + 120, 480]);
-    tl = tiledlayout(fig, 1, nUnits, 'TileSpacing', 'compact', 'Padding', 'compact');
-    title(tl, sprintf('%s — Mean |Error| By Target Angle Decile', label), ...
-        'FontWeight', 'bold', 'FontSize', 13);
-
     axesHandles = gobjects(1, nUnits);
     for i = 1:nUnits
-        axesHandles(i) = nexttile(tl, i);
+        tileIdx = (rowIdx - 1) * nCols + i;
+        axesHandles(i) = nexttile(tl, tileIdx);
         plotOneUnit(motorType.Units(i), motorType.TypeNumber, motorType.TypeName, modelOrder, numBins);
     end
-    syncAxes(axesHandles, 'xy');
+    syncAxes(axesHandles, 'x');
 end
 
 function syncAxes(axesHandles, whichAxis)
