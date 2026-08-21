@@ -38,6 +38,15 @@ see the README's dependency table). Grew out of `Servo_Auto_Calibrator`
 archived in [`historical-data/`](historical-data/); see that folder's
 own README for what they are.
 
+**`ServoAutoCalibrator/`** — a separate, standalone on-device firmware
+(no host script, no browser page): the same coarse+fine stall-scan
+range-finding concept as `ServoCalibrator_Companion`/`ServoDAQ`,
+reimplemented as a self-contained FSM (`ServoAutoCalibrator.ino`,
+one `switch`/`case` in `loop()`, fixed 50Hz tick) with active
+spin-recovery so it can safely push closer to a servo's true physical
+limits than a purely reactive timeout can. See its own dated section
+below.
+
 ## History: merged from two separate tools (2026-08-09)
 
 This repo originally shipped **two** separate tools: a wizard-based
@@ -762,6 +771,150 @@ for that to happen. Within one type's figure, every unit's axes share
 identical scale (a shared `syncAxes()` helper, synced per-row where
 rows carry different measurements) so units are directly visually
 comparable instead of each silently auto-scaling to its own range.
+
+## ServoAutoCalibrator: on-device FSM calibration with active spin-recovery (2026-08-20/21)
+
+A new, separate on-device tool (see "What this is" above) — same
+coarse+fine stall-scan concept proven in `ServoDAQ`, rebuilt as a
+self-contained FSM that needs no host script once calibration starts.
+
+**Root-cause diagnosis, not guessed**: an early "frozen zone below
+540µs" mystery turned out to be the exact same footgun documented for
+`ServoDAQ_Companion` — `servo.attach(SERVO_PIN)` without explicit pulse
+bounds silently clamps every `writeMicroseconds()` call to the
+`Servo` library's own default 544–2400µs range, so nothing below
+~540µs was ever actually sent to the servo. Looked exactly like a
+physical stall (flat readings, no motion) but wasn't. Fixed the same
+way as `ServoDAQ_Companion`: `servo.attach(SERVO_PIN, ABS_FLOOR_US,
+ABS_CEIL_US)` with `ABS_FLOOR_US 80` / `ABS_CEIL_US 3100`.
+
+**Active spin-recovery, not just detection.** Loosening the coarse
+step-jump threshold to chase maximum range triggered a real ~2.7-
+revolution servo spin during testing — the same servo-triggered
+stall/overcurrent-protection behavior documented for `ServoDAQ`'s
+`type3`-class servos. A settle-timeout can *detect* that something's
+wrong after ~3s, but can't prevent motion already in progress —
+prevention needs its own recovery action, not a longer timeout. Added
+`STATE_CAL_RECOVER_WAIT`: on a down/up-wait settle-timeout, command a
+move to a known-safe recovery candidate (the last confirmed-good
+pulse, falling back to `CENTER_US` if that itself doesn't settle) and
+resume normal edge-recording from there — mirroring `ServoDAQ`'s own
+`recover_from_wrap()`/`NotSettledError` handling. Verified twice on
+real hardware: once accidentally (the loosened threshold triggering a
+real spin that the new mechanism then recovered from cleanly) and once
+deliberately (re-loosening on purpose specifically to re-trigger it).
+Final verified range with recovery active: ~265–2150µs depending on
+run.
+
+**Verification**: every command and error path tested directly
+(`PING`, calibration reject-before-ready, all trajectory
+commands/model toggle, malformed commands correctly rejected); at
+least 50 random trajectories run and checked per-tick for non-smooth
+behavior — all 50 came back clean, ruling out the pulse-generation
+code as the source of an earlier "jerky small-step" report (left open
+whether that was the calibration sweep itself or genuine servo
+mechanical character — deprioritized once the trajectory-generation
+code itself was proven clean).
+
+## ServoDAQ: naive-sweep first-step stiction bug, and the study now complete at 9 units (2026-08-20/21)
+
+**A real bug in `naive_stall_sweep()`/`scan_until_weak()`** (`servo_daq.py`):
+both fed their very first tracked step into the reference-rate/stall
+judgment on equal footing with every later step — but a servo's first
+small move from a standing start reliably reads weaker than its
+established cruise rate (breakaway/stiction), confirmed by direct
+comparison against a continuous fine sweep across the identical pulse
+range. That understated first-step reading was corrupting the whole
+scan's stall threshold. **Fix**: both functions now record the first
+step's point but exclude it from stall/reversal/reference-rate
+judgment entirely (`first_step` flag, skip-and-`continue`) — diagnosed
+and verified by re-running against real hardware three times (v1
+broken: 1510us/2 steps; v2, a first wrong-theory fix attempt, still
+broken; v3, the real fix, correct: 2100us/61 steps).
+
+**The 8-unit study grew to 9** — the user ordered a third `type1`
+(Miuzei 25kg Servo) unit specifically to give every family 3 units.
+**Every unit now has a completed full accuracy run.** Corrected final
+state, replacing every earlier partial/in-progress note in this file:
+
+| Servo | Unit | Pulse Range | Stroke | linear2 | table10 | table20 | table50 | Trials |
+|---|---|---|---|---|---|---|---|---|
+| Miuzei 25kg Servo | 1 | 345–2080µs | 232.8° | 1.08° | 0.39° | 0.33° | 0.30° | 6,482 |
+| Miuzei 25kg Servo | 2 | 340–2080µs | 237.7° | 0.76° | 0.45° | 0.44° | 0.43° | 6,451 |
+| Miuzei 25kg Servo | 3 | 325–2075µs | 236.2° | 0.76° | 0.43° | 0.41° | 0.42° | 6,385 |
+| Knockoff MG996R | 1 | 350–2065µs | 160.2° | 1.42° | 0.49° | 0.48° | 0.49° | 7,433 |
+| Knockoff MG996R | 2† | 370–1975µs | 148.0° | 1.16° | 0.25° | 0.25° | 0.25° | 2,468 |
+| Knockoff MG996R | 3 | 355–2075µs | 158.7° | 0.88° | 0.20° | 0.21° | 0.18° | 2,448 |
+| MG90D | 1 | 265–2075µs | 241.6° | 1.13° | 0.66° | 0.62° | 0.63° | 7,766 |
+| MG90D | 2 | 330–2075µs | 230.4° | 2.75° | 0.45° | 0.45° | 0.41° | 7,775 |
+| MG90D | 3 | 340–2075µs | 229.8° | 2.02° | 0.57° | 0.64° | 0.60° | 7,821 |
+
+55,029 independent trials total. Same shape holds on every unit:
+`linear2` clearly worst, diminishing returns past ~10 points. The
+MG90D family shows the biggest linear-vs-table gap (its curve bows
+furthest from a straight line); the knockoff MG996R has the best
+calibrated accuracy but the worst reliability.
+
+**Correcting this file's own death count**: earlier notes here said
+one `type2` unit died. It was actually **two**, at two different
+stages of the study. The study's original plan was an 8-hour accuracy
+phase; the very first candidate tested — a knockoff MG996R — died
+about 3.5 hours in, which is why every unit after it ran a 3-hour
+standard instead (the reason `type1`/`type3` all run 3h, never
+recorded here before). A second knockoff MG996R later died 61 minutes
+into *that* 3-hour standard (stamp `20260820-144446`, AS5600 reading
+froze solid, motor confirmed dead) — that second death is what further
+cut this family to a 1-hour cap. Both slots got replacement physical
+units that then tested clean (the data in the table above).
+`type2_unit1`/`type2_unit3`'s own physical units never died. See
+persistent memory (`servodaq-8unit-study-status.md`,
+`type2-motors-fragile-1hour-limit.md`) for the full correction
+history — this file's numbers were wrong in two different sessions
+before landing on the right count, worth remembering as a caution
+against trusting a clean dataset as proof a unit-number slot never
+lost a servo.
+
+`MOTOR_TYPES.md` updated to reflect `type1` x3 (was x2).
+
+## MATLAB toolkit: cross-type axis sync, zoom-window centering fix (2026-08-21)
+
+Per explicit direction, axis-sync scope now differs by script:
+`plotHardStops.m` and `plotErrorVsAngle.m` sync **across every
+type/unit in the figure** (not just within one type) for `x`
+(`plotHardStops.m`) or `y` only (`plotErrorVsAngle.m` — target-angle
+range still stays per-type, since that's a real physical difference
+between families). `plotCalibration.m`/`plotAccuracy.m` stay
+per-type-only, unchanged.
+
+`plotCalibration.m`'s zoomed-hysteresis row now centers its window on
+each unit's own **mid-range** pulse (`(min+max)/2`) instead of
+anchoring at the min pulse, so the fixed-width window actually spans
+its full intended width instead of being clipped against the low
+edge. This surfaced a real follow-on bug: the row's existing
+per-type `syncAxes(zoomAxes, 'xy')` call then stretched every unit's
+X-axis to the union of all their differently-centered windows,
+shrinking each unit's actual data back down to a fraction of the
+panel — the same truncation problem the centering fix was meant to
+solve. Fixed by syncing only `y` on the zoom row (angle is still a
+comparable quantity across units); `x` stays per-unit, since each
+unit's centered window is deliberately unique to that unit.
+
+## Website content architecture: `article.md` at repo root (2026-08-21)
+
+This repo's `article.md` is the canonical source for this project's
+long-form write-up on [vishwamaggarwal.com](https://vishwamaggarwal.com)
+— written here, not in the website repo, per the user's explicit
+preference to work at the project level and have the website pull
+from it rather than authoring content twice. `draft: true` in its
+frontmatter until it gets a final read-through. The website's own
+fetch-at-build-time pipeline (pulling this file via the GitHub API,
+triggered by a Vercel Deploy Hook) is still unbuilt as of this
+writing — see the website repo's own `CLAUDE.md` once that lands.
+Frontmatter/inline-SVG-chart conventions (`--series-1`/`--series-2`
+CSS tokens, no custom classes, no blank line inside an HTML block)
+match the website's existing `src/content/articles/*.md` exactly, so
+the file can be dropped in with no reformatting once the pipeline
+exists.
 
 ## Requirements & dependencies
 
