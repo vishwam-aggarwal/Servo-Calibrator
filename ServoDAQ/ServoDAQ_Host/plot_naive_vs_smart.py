@@ -64,12 +64,12 @@ def main():
         print("PING ok")
 
         print("naive sweep, low side (1500us -> down, 10us steps, stop on stall)...")
-        low_edge, naive_low = naive_stall_sweep(link, CENTER_US, 10, -1)
+        low_edge, naive_low, _ = naive_stall_sweep(link, CENTER_US, 10, -1)
         print(f"  naive low edge: {low_edge[0]}us ({low_edge[1]} centideg)")
 
         link.move_to(CENTER_US)
         print("naive sweep, high side (1500us -> up, 10us steps, stop on stall)...")
-        high_edge, naive_high = naive_stall_sweep(link, CENTER_US, 10, +1)
+        high_edge, naive_high, _ = naive_stall_sweep(link, CENTER_US, 10, +1)
         print(f"  naive high edge: {high_edge[0]}us ({high_edge[1]} centideg)")
 
         link.move_to(CENTER_US)
