@@ -105,6 +105,8 @@ TABLE_SIZES = {"linear2": 2, "table10": 10, "table20": 20, "table30": 30, "table
 MOVE_REST_S = 1.0              # deliberate rest after every move in the accuracy test -- see module docstring
 DEFAULT_ACCURACY_HOURS = 0.25  # ~15min default; pass a real duration explicitly for a long run
 PROGRESS_EVERY = 50            # print a progress line every N trials
+EDGE_MARGIN_FRACTION = 0.05    # how far inside the found range to keep accuracy-test targets, on a unit whose
+                                 # range-finding needed a NotSettledError recovery -- see main()'s own comment
 
 
 def save_csv(path, rows, header):
@@ -180,7 +182,7 @@ def angle_to_pulse(table, target_angle):
     return p0 + frac * (p1 - p0)
 
 
-def run_accuracy_test(link, ground_truth, min_us, max_us, hours, out_path, seed=None):
+def run_accuracy_test(link, ground_truth, min_us, max_us, hours, out_path, seed=None, edge_margin_fraction=0.0):
     """Randomized end-to-end accuracy test. Every trial is fully
     independent: its own random target angle AND its own independently-
     chosen model -- no more testing all 6 models against one shared
@@ -209,10 +211,26 @@ def run_accuracy_test(link, ground_truth, min_us, max_us, hours, out_path, seed=
     converted to plain degrees at the point of writing -- this file has
     no downstream reader in the codebase (only ad hoc analysis), so
     there's no interoperability reason to keep it in centidegrees, and
-    plain degrees is much easier to eyeball in a raw row."""
+    plain degrees is much easier to eyeball in a raw row.
+
+    edge_margin_fraction (default 0, i.e. no change from before) pulls
+    the random target-angle range in by that fraction of the full span
+    on each end -- for a unit whose range-finding needed a
+    NotSettledError recovery, real hardware showed that sitting at/near
+    the established edge even once can leave the very next command
+    (anywhere) landing roughly a full lap off. Keeping targets (and so
+    the pulses they map to) a small margin away from the exact edge
+    avoids re-triggering it, at the cost of not testing the outermost
+    sliver of the range. min_us/max_us stay the true hardware clamp
+    either way -- this only narrows what angles get *drawn*, not the
+    safety clamp on the resulting pulse."""
     rng = random.Random(seed)
     models = {name: build_table(ground_truth, n) for name, n in TABLE_SIZES.items()}
     min_angle, max_angle = ground_truth[0][1], ground_truth[-1][1]
+    if edge_margin_fraction > 0:
+        margin = (max_angle - min_angle) * edge_margin_fraction
+        min_angle += margin
+        max_angle -= margin
 
     start = time.time()
     deadline = start + hours * 3600
@@ -294,12 +312,12 @@ def main():
         try:
             # ---- Phase 1: naive + smart + fine (short, a few minutes) ----
             print("naive sweep, low side (1500us -> down, 10us steps, stop on stall)...")
-            low_edge, low_trace = naive_stall_sweep(link, CENTER_US, 10, -1)
+            low_edge, low_trace, naive_low_hit = naive_stall_sweep(link, CENTER_US, 10, -1)
             print(f"  naive low edge: {low_edge[0]}us ({low_edge[1]} centideg), {len(low_trace)} steps")
 
             link.move_to(CENTER_US)
             print("naive sweep, high side (1500us -> up, 10us steps, stop on stall)...")
-            high_edge, high_trace = naive_stall_sweep(link, CENTER_US, 10, +1)
+            high_edge, high_trace, naive_high_hit = naive_stall_sweep(link, CENTER_US, 10, +1)
             print(f"  naive high edge: {high_edge[0]}us ({high_edge[1]} centideg), {len(high_trace)} steps")
 
             link.move_to(CENTER_US)
@@ -310,6 +328,26 @@ def main():
                 f"  smart range: {min_us}us ({smart['min_centideg']} centideg) to "
                 f"{max_us}us ({smart['max_centideg']} centideg)"
             )
+
+            # Whether ANY range-finding pass (naive or smart, either side)
+            # ever needed a NotSettledError recovery -- real hardware
+            # showed that once a unit does this near an edge, the very
+            # next command (regardless of where it goes) can land roughly
+            # a full lap off, with no other sign of trouble. The accuracy
+            # test can't avoid the edges outright (that's the whole point
+            # of testing across the real range), but for a unit that's
+            # shown this behavior once, it keeps its random targets a
+            # small margin away from the exact edge -- see
+            # run_accuracy_test()'s own edge_margin_fraction.
+            edge_sensitive = any([
+                naive_low_hit, naive_high_hit,
+                smart["low_hit_not_settled"], smart["high_hit_not_settled"],
+            ])
+            if edge_sensitive:
+                print(
+                    "  note: this unit needed a NotSettledError recovery during range-finding -- "
+                    f"accuracy test will keep targets {EDGE_MARGIN_FRACTION:.0%} inside the found range"
+                )
 
             link.move_to(min_us)
             print(f"fine calibration sweep, min -> max ({min_us}us -> {max_us}us, {FINE_STEP_US}us steps)...")
@@ -361,7 +399,9 @@ def main():
             print(f"accuracy test: {sorted(TABLE_SIZES.values())} models, independently random target angle "
                   f"AND model per trial, {MOVE_REST_S}s rest/move, running for {accuracy_hours}h...")
             try:
-                n_trials = run_accuracy_test(link, ground_truth, min_us, max_us, accuracy_hours, accuracy_path)
+                margin = EDGE_MARGIN_FRACTION if edge_sensitive else 0.0
+                n_trials = run_accuracy_test(link, ground_truth, min_us, max_us, accuracy_hours, accuracy_path,
+                                              edge_margin_fraction=margin)
                 print(f"  {n_trials} independent trials completed")
             except Exception as e:
                 print(f"\naccuracy test stopped early ({e}) -- summarizing whatever was captured")
