@@ -1,28 +1,47 @@
-%PLOTHARDSTOPS  One figure per motor type, one subplot per unit of that
-%   type, overlaying the naive/coarse/fine hard-stop range-finding
-%   sweeps (pulse width vs. shaft angle) with the identified min/max
-%   pulse clearly marked. Calls setup() itself, so this runs standalone.
+%PLOTHARDSTOPS  One figure total, every motor type stacked into the same
+%   tiledlayout (one row per type, one column per unit of that type),
+%   overlaying the naive/coarse/fine hard-stop range-finding sweeps
+%   (pulse width vs. shaft angle) with the identified min/max pulse
+%   clearly marked. Both axes are synced across every panel in the
+%   figure -- every type, every unit -- not just within a type, for
+%   direct cross-type/cross-unit comparison. Calls setup() itself, so
+%   this runs standalone.
 
 setup;
 
-for t = 1:numel(motors)
-    plotOneType(motors(t));
+nTypes = numel(motors);
+nCols = max([1, arrayfun(@(m) numel(m.Units), motors)]);
+fig = figure('Name', 'All Motor Types — Hard-Stop Sweeps', 'Color', 'w', ...
+    'Position', [50 50, 420 * nCols + 140, 400 * nTypes + 120]);
+tl = tiledlayout(fig, nTypes, nCols, 'TileSpacing', 'compact', 'Padding', 'compact');
+title(tl, 'Naive Vs. Coarse Vs. Fine Range-Finding — All Motor Types', ...
+    'FontWeight', 'bold', 'FontSize', 13);
+
+allAxes = gobjects(1, 0);
+for t = 1:nTypes
+    allAxes = [allAxes, plotOneType(tl, nCols, t, motors(t))]; %#ok<AGROW>
 end
+% Synced across every type/unit in the figure -- pulse width (µs) and
+% shaft angle (deg) are both directly comparable quantities across
+% every motor type here, so one shared scale makes cross-type range
+% comparison direct instead of each panel silently getting its own
+% auto-scaled range.
+syncAxes(allAxes, 'xy');
 
-function plotOneType(motorType)
+function axesHandles = plotOneType(tl, nCols, rowIdx, motorType)
+    % rowIdx is this type's (only) row within the shared tiledlayout --
+    % every type gets exactly one row here, so no row offset math beyond
+    % picking the right row is needed (contrast plotCalibration.m/
+    % plotAccuracy.m, which give each type multiple rows). Axes are
+    % returned, not synced here -- the caller syncs across the whole
+    % figure once every type has been plotted.
     nUnits = numel(motorType.Units);
-    label = typeLabel(motorType.TypeNumber, motorType.TypeName);
-    fig = figure('Name', sprintf('%s Hard-Stop Sweeps', label), 'Color', 'w');
-    tl = tiledlayout(fig, 1, nUnits, 'TileSpacing', 'compact', 'Padding', 'compact');
-    title(tl, sprintf('%s — Naive Vs. Coarse Vs. Fine Range-Finding', label), ...
-        'FontWeight', 'bold', 'FontSize', 12);
-
     axesHandles = gobjects(1, nUnits);
     for i = 1:nUnits
-        axesHandles(i) = nexttile(tl);
+        tileIdx = (rowIdx - 1) * nCols + i;
+        axesHandles(i) = nexttile(tl, tileIdx);
         plotOneUnit(motorType.Units(i), motorType.TypeNumber, motorType.TypeName);
     end
-    syncAxes(axesHandles, 'xy');
 end
 
 function syncAxes(axesHandles, whichAxis)

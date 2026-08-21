@@ -6,16 +6,19 @@
 %   slope against pulse, revealing any bowing or other non-linearity a
 %   straight line through the endpoints alone would hide; bottom is a
 %   zoomed-in view of the same up/down/average/shading over a fixed-
-%   width window anchored at each unit's own min pulse, since the full-
-%   range view alone makes a real hysteresis band (typically under 2deg
-%   against a 200+deg range) too thin to actually see. Calls setup()
-%   itself, so this runs standalone.
+%   width window centered on each unit's own mid-range pulse, since the
+%   full-range view alone makes a real hysteresis band (typically under
+%   2deg against a 200+deg range) too thin to actually see. Calls
+%   setup() itself, so this runs standalone.
 
-ZOOM_WIDTH_US = 100;   % same window width for every unit, anchored at
-                        % each unit's own min pulse -- an absolute
-                        % window wouldn't necessarily land inside every
-                        % unit's real range, but a fixed offset from
-                        % each unit's own edge always does
+ZOOM_WIDTH_US = 100;   % same window width for every unit, centered on
+                        % each unit's own (min+max)/2 pulse -- an
+                        % absolute window wouldn't necessarily land
+                        % inside every unit's real range, but a window
+                        % built from each unit's own range always does.
+                        % Centered rather than anchored at the min pulse
+                        % so the window actually spans its full width
+                        % instead of being clipped against the low edge.
 
 setup;
 
@@ -48,7 +51,16 @@ function plotOneType(motorType, zoomWidthUs)
     % no shared scale to begin with.
     syncAxes(curveAxes, 'xy');
     syncAxes(slopeAxes, 'xy');
-    syncAxes(zoomAxes, 'xy');
+    % Zoom row: Y only, not X. Each unit's zoom window is deliberately
+    % centered on that unit's OWN mid-range pulse (plotZoom sets its own
+    % xlim), so different units sit at different absolute pulse values
+    % on purpose. Syncing X here would replace each unit's own
+    % ZOOM_WIDTH_US-wide window with the union of every unit's window in
+    % this row -- wider than intended, so each unit's actual data would
+    % only fill part of the shared axis instead of spanning it (the
+    % exact truncation this row exists to avoid). Y (angle) is still a
+    % comparable quantity across units, so it stays synced.
+    syncAxes(zoomAxes, 'y');
 end
 
 function syncAxes(axesHandles, whichAxis)
@@ -113,7 +125,7 @@ end
 function plotZoom(unitData, typeNumber, typeName, zoomWidthUs)
     up = unitData.FineUp;
     down = unitData.FineDown;
-    titleStr = sprintf('%s — Zoomed Near Min µs', unitLabel(typeNumber, typeName, unitData.UnitNumber));
+    titleStr = sprintf('%s — Zoomed Near Mid-Range', unitLabel(typeNumber, typeName, unitData.UnitNumber));
 
     if isempty(up) || isempty(down)
         emptyPanel(gca, titleStr, 'No Calibration Sweep Yet');
@@ -121,8 +133,25 @@ function plotZoom(unitData, typeNumber, typeName, zoomWidthUs)
     end
 
     allPulse = intersect(up.pulse_us, down.pulse_us);
-    lo = min(allPulse);
-    hi = min(lo + zoomWidthUs, max(allPulse));
+    minPulse = min(allPulse);
+    maxPulse = max(allPulse);
+    midPulse = (minPulse + maxPulse) / 2;
+    lo = midPulse - zoomWidthUs / 2;
+    hi = midPulse + zoomWidthUs / 2;
+    % Clamp into the unit's real range while preserving the full window
+    % width where possible -- shifts the whole window rather than just
+    % truncating one side, so it still spans zoomWidthUs unless the
+    % unit's actual range is narrower than that.
+    if lo < minPulse
+        hi = hi + (minPulse - lo);
+        lo = minPulse;
+    end
+    if hi > maxPulse
+        lo = lo - (hi - maxPulse);
+        hi = maxPulse;
+    end
+    lo = max(lo, minPulse);
+    hi = min(hi, maxPulse);
 
     drawCalibrationTraces(up, down, [lo hi]);
     xlim([lo hi]);
