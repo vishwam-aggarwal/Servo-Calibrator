@@ -63,13 +63,19 @@
 #define CAL_SETTLE_TIMEOUT_MS 3000   // exit route 1 of every waiting state: give up if it never settles
 #define CAL_SETTLE_WINDOW_SAMPLES 10 // N -- how many recent raw readings the running average is over (to tune later)
 #define CAL_SETTLE_WINDOW_COUNTS 2   // max |current raw - running average| to call it settled (to tune later)
-// M -- how many recent raw readings the reported "filtered position"
-// is averaged over. Was 10 (200ms at this 50Hz tick rate) -- reduced
-// per direct feedback that the live TELEM trace read too smooth,
-// visibly blunting real tracking error/lag rather than just knocking
-// down AS5600 quantization noise. 3 (60ms) still averages away
-// single-sample spikes without hiding real short-timescale motion.
-#define CAL_POSITION_FILTER_SAMPLES 3
+// M -- how many recent raw readings filteredPosition is averaged over.
+// NOT what TELEM reports anymore (see printTelemetry() -- that now
+// sends the raw, unfiltered position directly, per explicit direction).
+// filteredPosition itself still matters for real functional uses this
+// value tunes the responsiveness of: the calibration table's own
+// angleCentideg values (recordTableEntry()), a GO move's planned
+// starting point (currentAngleDeg()), and the calibration scan's own
+// edge-detection (updateStepDelta()). Was 10 (200ms at this 50Hz tick),
+// then 3 (60ms) once TELEM was still routing through it and read too
+// smooth; now that TELEM bypasses it entirely, bumped back up slightly
+// to 5 (100ms) -- a little more settling margin for the uses that still
+// need it, now that doing so no longer costs the live trace anything.
+#define CAL_POSITION_FILTER_SAMPLES 5
 
 // STATE_CAL_DOWN_*/STATE_CAL_UP_* run both the coarse and fine passes --
 // same states, same edge-detection logic either way, just a different
@@ -568,14 +574,18 @@ int32_t trajTargetVelCentidegPerSec = 0;
 // html app already has both numbers it needs to do that subtraction on
 // its own.
 //
-// actualVelCentidegPerSec comes from encoderDerivative (the raw,
-// unfiltered per-tick delta computed once in loop() -- see its own
-// comment) rather than differencing filteredPosition here: the position
-// filter's whole purpose is smoothing AS5600 quantization noise for a
-// *reported position*, so differencing that already-smoothed signal would
-// just reintroduce lag without removing any noise a second time.
-// encoderDerivative already exists, computed fresh every tick, specifically
-// for a use like this.
+// Both actualCentideg and actualVelCentidegPerSec are RAW/unfiltered --
+// per explicit direction, TELEM should show the real, unsmoothed signal
+// rather than whatever filteredPosition happens to be tuned to for its
+// other uses (the calibration table, a GO move's planned start, the
+// scan's own edge-detection -- see filteredPosition's own comment).
+// actualCentideg comes from rawAngleCentideg() (totalCounts, not
+// filteredPosition); actualVelCentidegPerSec comes from encoderDerivative
+// (the raw per-tick delta computed once in loop() -- see its own
+// comment), which was already unfiltered even before this change: the
+// position filter's whole purpose is smoothing AS5600 quantization noise
+// for the *filtered* uses, so differencing an already-smoothed signal
+// would just reintroduce lag without removing any noise a second time.
 //
 // Deliberately its own wire format (TELEM, space-separated, printed
 // directly rather than through printMessage()) instead of folding into
@@ -584,7 +594,7 @@ int32_t trajTargetVelCentidegPerSec = 0;
 // logging, not a fixed-rate telemetry stream a chart wants to index by
 // wall-clock time.
 void printTelemetry() {
-  int32_t actualCentideg = currentAngleCentideg();
+  int32_t actualCentideg = rawAngleCentideg();
   int32_t actualVelCentidegPerSec = (int32_t)(encoderDerivative * 36000L / 4096L * (long)LOOP_FREQUENCY_HZ);
   Serial.print(F("TELEM "));
   Serial.print(millis());
@@ -925,10 +935,13 @@ int tablePulseUs(int index) {
 
 // filteredPosition (continuous, unwrapped counts -- see
 // updatePositionTracking()) -> centidegrees, via plain integer math (exact
-// ratio 36000/4096 -- no float needed). Shared by recordTableEntry() below
-// (one reading per settle, during calibration) and printTelemetry() further
-// down (the actual-position field of every tick's stream) -- both want the
-// same conversion of the same underlying value, just at different times.
+// ratio 36000/4096 -- no float needed). Used by recordTableEntry() (one
+// reading per settle, during calibration) and currentAngleDeg() further
+// down (a GO move's planned starting point) -- both want the smoothed
+// value. printTelemetry() does NOT use this (see rawAngleCentideg()
+// right below) -- per explicit direction, TELEM reports the raw,
+// unfiltered position, decoupled from whatever filteredPosition is
+// tuned to for those other, still-filtered uses.
 // Defined here, ahead of recordTableEntry()'s own use of it, but Arduino
 // auto-generates a forward declaration for every function in the file
 // (the same reason CalPoint had to be hand-placed near the top instead --
@@ -937,6 +950,16 @@ int tablePulseUs(int index) {
 // order elsewhere in this file is never actually a problem.
 int32_t currentAngleCentideg() {
   return (int32_t)(filteredPosition * 36000L / 4096L);
+}
+
+// Same conversion as currentAngleCentideg(), but from totalCounts (the
+// raw, unfiltered running position updatePositionTracking() maintains
+// every tick) instead of filteredPosition -- what printTelemetry()
+// reports as the actual position, per explicit direction that TELEM
+// should show the real, unsmoothed signal rather than whatever
+// filteredPosition happens to be averaged over for its other uses.
+int32_t rawAngleCentideg() {
+  return (int32_t)(totalCounts * 36000L / 4096L);
 }
 
 // Called from STATE_CAL_TABLE_WAIT once a table point settles. No
