@@ -11,7 +11,7 @@ output shaft as ground truth, one self-contained HTML file talking
 [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API),
 no build step:
 
-- **`ServoCalibrator.html` + `ServoCalibrator_Companion/`** — one button
+- **`website/app.html` + `ServoCalibrator_Companion/`** — one button
   (`CAL`) stall-scans a servo's real mechanical pulse range (with active
   spin-recovery so it can safely push closer to a servo's true physical
   limits than a purely reactive timeout can) and builds a
@@ -1424,3 +1424,17 @@ support in this firmware yet (the old wizard-era version had it — see
 git history; the table-interpolation math here is transport-agnostic
 too, so adding it back would mean swapping the raw `Servo` calls for
 `PCA9685Backend` ones, not touching the calibration/table logic at all).
+
+## Website content moved into a `website/` folder; tool.md added (2026-08-22)
+
+Per a new site-wide convention (decided from the website repo's side, applying to every project repo it pulls from — see that repo's own `CLAUDE.md`), everything this repo feeds to vishwamaggarwal.com now lives under one `website/` folder instead of scattered at repo root:
+
+- `article.md`, `data.md` (unchanged names, just relocated — see the 2026-08-21 entry above for what these are)
+- `test-jig.jpg` → `website/images/test-jig.jpg`
+- `Hookup.png` → `website/images/hookup.png` (also lowercased, matching the `/images/servo-calibrator/hookup.png` path `tool-page.md` already referenced)
+- `ServoCalibrator.html` → `website/app.html` — renamed, not just moved: the generic name is the point of the convention, so any future tool's app is always `website/app.html` regardless of what the tool itself is called, and the website repo's `content.config.ts` doesn't need a per-tool filename. Every other repo reference to the app by its old name — README's Quick start/Status blurb/"How it works", `ServoDAQ/README.md`'s cross-reference, and the handful of `ServoCalibrator_Companion.ino` comments that named it — updated to `website/app.html`. (This file's own dated history entries above still say `ServoCalibrator.html`, deliberately left alone — they're describing what was true when written.)
+- `tool-page.md` → `website/tool.md`, and its frontmatter filled out to match the website's `toolPages` collection schema (`tags`, `status: active`, `repo`) — it only had `title`/`description`/`draft` before, drafted before that schema existed. Also split its "Getting it running" section: the part that's actually about compiling the sketch (install AS5600 + Universal-Trajectory-Interface, flash) is now its own "Getting the firmware to compile" section per explicit request, and the old step 3 (`python -m http.server` to self-serve `ServoCalibrator.html` locally) was dropped from this file specifically — that instruction belongs in README for someone building from the repo, not in the website's tool page, which already has its own **Launch** button once the website repo renders it. Still `draft: true` — hasn't had the user's go-ahead to flip live yet, same convention as `article.md`/`data.md` before they were published.
+
+Also fixed a stale line in README's top Status blurb ("the firmware depends on two of my other libraries that aren't public yet") that the 2026-08-22 01:11 dependency-docs fix (see entry above) had missed — it only touched the Quick start/Requirements sections, not this one. Now says what's actually true: one public sibling dependency, no private access needed.
+
+Local Arduino sketchbook clone (`~/Documents/Arduino/Servo-Calibrator`) brought current with this restructuring via the same branch → commit/push → PR → merge → pull sequence as everything else in this repo.
