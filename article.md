@@ -152,7 +152,7 @@ A pan/tilt camera mount can absorb a degree of error and nobody notices the hori
 
 <div class="chart-figure">
 <p class="chart-title">End-effector drift radius: naive linear model vs. calibrated table, three-joint arm</p>
-<svg viewBox="0 0 780 340" role="img" aria-label="Diagram of a three-joint arm with two circles at the end effector showing positional drift radius, roughly 8.4 millimeter radius for the naive linear model versus 2.7 millimeter radius for a calibrated table">
+<svg viewBox="0 0 850 340" role="img" aria-label="Diagram of a three-joint arm with two circles at the end effector showing positional drift radius, roughly 8.4 millimeter radius for the naive linear model versus 2.7 millimeter radius for a calibrated table">
 <rect x="40" y="290" width="64" height="15" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5"/>
 <circle cx="72" cy="282" r="13" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
 <line x1="72" y1="282" x2="300" y2="210" stroke="var(--text-faint)" stroke-width="2.5"/>
