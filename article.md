@@ -76,6 +76,76 @@ Averaged per family, the naive formula's mean error is 0.87° for the Miuzei 25k
 
 The knockoff MG996R deserves its own aside: once calibrated, its accuracy is the best of the three families (as low as 0.18° on one unit) — but two different physical units died mid-study, both from encoder-freeze failures that took the motor with them. The study's original plan was even an 8-hour accuracy phase; the very first candidate tested — a knockoff MG996R — died about 3.5 hours in, which is why every unit after it ran a 3-hour standard instead, and a second knockoff MG996R later died 61 minutes into *that* standard, which is why this family alone now runs on a 1-hour cap. If you build with these: budget for spares.
 
+## The servos aren't built the same, mechanically
+
+Accuracy wasn't the only thing this bench measured. Every unit's full range-finding sweep and fine calibration sweep also produced two more numbers worth knowing before you design around one of these: how much pulse width actually buys you a degree of rotation, and how much backlash — the gap between approaching an angle from above versus below — a static calibration table can't touch at all.
+
+<div class="chart-figure">
+<p class="chart-title">Pulse width required per degree of rotation, by family</p>
+<svg viewBox="0 0 680 260" role="img" aria-label="Bar chart showing the knockoff MG996R needs 10.8 microseconds of pulse width per degree of rotation, versus 7.4 for the Miuzei 25kg Servo and 7.5 for the MG90D">
+<line x1="48" y1="216.0" x2="656" y2="216.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="220.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">0</text>
+<line x1="48" y1="167.0" x2="656" y2="167.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="171.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">3</text>
+<line x1="48" y1="118.0" x2="656" y2="118.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="122.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">6</text>
+<line x1="48" y1="69.0" x2="656" y2="69.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="73.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">10</text>
+<line x1="48" y1="20.0" x2="656" y2="20.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="24.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">13</text>
+<rect x="94.3" y="104.4" width="110" height="111.6" fill="var(--series-1)"/>
+<text x="149.3" y="94.4" font-family="var(--font-mono)" font-size="12" fill="var(--text)" font-weight="600" text-anchor="middle">7.4 &#181;s/&#176;</text>
+<text x="149.3" y="236" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">Miuzei 25kg Servo</text>
+<rect x="297.0" y="53.2" width="110" height="162.8" fill="var(--series-1)"/>
+<text x="352.0" y="43.2" font-family="var(--font-mono)" font-size="12" fill="var(--text)" font-weight="600" text-anchor="middle">10.8 &#181;s/&#176;</text>
+<text x="352.0" y="236" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">Knockoff MG996R</text>
+<rect x="499.7" y="102.9" width="110" height="113.1" fill="var(--series-1)"/>
+<text x="554.7" y="92.9" font-family="var(--font-mono)" font-size="12" fill="var(--text)" font-weight="600" text-anchor="middle">7.5 &#181;s/&#176;</text>
+<text x="554.7" y="236" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">MG90D</text>
+</svg>
+<p class="chart-caption">All nine units were swept across a similar ~1.6&ndash;1.8ms pulse span. The knockoff MG996R needs ~46% more of it per degree of real rotation than the other two families &mdash; a real gearing difference, consistent across all three of its own units, not a calibration artifact.</p>
+</div>
+
+The gearing difference matters for planning a build (a narrower pulse span buys less usable range on the MG996R), but it's a separate question from backlash — the up-sweep and down-sweep of the same fine calibration disagreeing at the same commanded pulse, purely from mechanical slop in the gear train. A lookup table stores one angle per pulse; it has no way to represent "depends which direction you came from," and can't fix this even in principle.
+
+<div class="chart-figure">
+<p class="chart-title">Backlash: mean vs. worst-case disagreement, by family</p>
+<svg viewBox="0 0 680 290" role="img" aria-label="Grouped bar chart of mean and maximum backlash by servo family. The MG90D has both the highest mean backlash at 1.33 degrees and the highest worst-case backlash at 2.93 degrees">
+<line x1="48" y1="246.0" x2="656" y2="246.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="250.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">0.0</text>
+<line x1="48" y1="189.5" x2="656" y2="189.5" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="193.5" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">0.8</text>
+<line x1="48" y1="133.0" x2="656" y2="133.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="137.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">1.6</text>
+<line x1="48" y1="76.5" x2="656" y2="76.5" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="80.5" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">2.5</text>
+<line x1="48" y1="20.0" x2="656" y2="20.0" stroke="var(--border)" stroke-width="1"/>
+<text x="40" y="24.0" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="end">3.3</text>
+<rect x="101.3" y="165.9" width="44" height="80.1" fill="var(--series-1)"/>
+<text x="123.3" y="157.9" font-family="var(--font-mono)" font-size="10.5" fill="var(--text)" text-anchor="middle">1.17&#176;</text>
+<rect x="153.3" y="101.5" width="44" height="144.5" fill="var(--series-2)"/>
+<text x="175.3" y="93.5" font-family="var(--font-mono)" font-size="10.5" fill="var(--text)" text-anchor="middle">2.11&#176;</text>
+<text x="149.3" y="266" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">Miuzei 25kg Servo</text>
+<rect x="304.0" y="175.5" width="44" height="70.5" fill="var(--series-1)"/>
+<text x="326.0" y="167.5" font-family="var(--font-mono)" font-size="10.5" fill="var(--text)" text-anchor="middle">1.03&#176;</text>
+<rect x="356.0" y="120.0" width="44" height="126.0" fill="var(--series-2)"/>
+<text x="378.0" y="112.0" font-family="var(--font-mono)" font-size="10.5" fill="var(--text)" text-anchor="middle">1.84&#176;</text>
+<text x="352.0" y="266" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">Knockoff MG996R</text>
+<rect x="506.7" y="154.9" width="44" height="91.1" fill="var(--series-1)"/>
+<text x="528.7" y="146.9" font-family="var(--font-mono)" font-size="10.5" fill="var(--text)" text-anchor="middle">1.33&#176;</text>
+<rect x="558.7" y="45.3" width="44" height="200.7" fill="var(--series-2)"/>
+<text x="580.7" y="37.3" font-family="var(--font-mono)" font-size="10.5" fill="var(--text)" text-anchor="middle">2.93&#176;</text>
+<text x="554.7" y="266" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">MG90D</text>
+</svg>
+<div class="chart-legend">
+<span><span class="swatch" style="background: var(--series-1);"></span>Mean backlash</span>
+<span><span class="swatch" style="background: var(--series-2);"></span>Worst-case (max) backlash</span>
+</div>
+<p class="chart-caption">Up-sweep vs. down-sweep disagreement at shared pulse values, from the same fine calibration sweep that built each unit's ground truth. The MG90D&mdash;already the servo whose curve bows furthest from a straight line&mdash;also has the most backlash, on average and at its worst.</p>
+</div>
+
+It's not a coincidence that the MG90D leads both charts in this section as well as the accuracy table above it: whatever makes its mechanism less linear also tends to make it looser. None of that shows up in a lookup table's numbers directly, but it's exactly the kind of thing a table can't fix — if a build's joints need to settle to a repeatable position regardless of approach direction, that's a mechanical design problem (a hard stop, a spring preload, a consistent single approach direction in software), not a calibration one.
+
 ## Why a single joint can shrug off a degree, and an arm can't
 
 A pan/tilt camera mount can absorb a degree of error and nobody notices the horizon tilt. A robotic arm can't — every joint's error doesn't just sit there, it rides on top of every joint downstream of it, compounding into wherever the end effector actually lands.
