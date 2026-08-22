@@ -3,7 +3,7 @@ title: "Your Servo Is Lying To You"
 description: "Nine hobby servos, 55,000 measured moves, and the calibration trick that turns a wobbly robotic arm into a precise one."
 pubDate: 2026-08-21
 tags: ["Robotics", "Embedded", "Control Theory"]
-draft: true
+draft: false
 ---
 
 I wanted to build the best robotic arm I could out of hobby servos — no exotic actuators, no $400 Dynamixels, just the same $8–$25 servos everyone already has a drawer full of. The bottleneck turned out not to be torque, or speed, or even the servos themselves. It was math.
@@ -114,6 +114,6 @@ Swap in a 20-point calibration table built from the same kind of sweep this stud
 
 ## So, what's the best arm I can build?
 
-Bench-tested and totaled up: any of these three families, run through a 10-to-20-point calibration table instead of the textbook formula, lands within half a degree of its commanded target — sub-millimeter positioning on a typical hobby-arm link. That's not a marginal win worth shrugging off; it's the difference between a robot arm that reaches *roughly* where you tell it to, and one that actually lands there.
+Bench-tested and totaled up: run through a 10-to-20-point calibration table instead of the textbook formula, the Miuzei and the knockoff MG996R both land within half a degree of their commanded target — sub-millimeter positioning on a typical hobby-arm link. The MG90D lands a little behind that, at 0.57° — just over a millimeter at the same link length — but that's still a huge jump from its naive 1.97°, just not quite sub-millimeter. Either way, that's not a marginal win worth shrugging off; it's the difference between a robot arm that reaches *roughly* where you tell it to, and one that actually lands there.
 
 Which family to build with comes down to reach, load, and how many spares you're willing to keep on a shelf, not whether it's worth calibrating — on this bench, that was never really in question. The Miuzei is the steady, reliable default for a base or shoulder joint. The MG90D is small, cheap, and needs the table most, which makes it a strong pick for a wrist or gripper specifically because calibration erases its biggest weakness. The knockoff MG996R has the best calibrated accuracy of the three, but earned its reliability caveat honestly — keep spares.
