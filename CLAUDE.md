@@ -1135,6 +1135,19 @@ jitter (a momentary `-9`/`+9` reversal right at the start of one run) a
 filtered signal would have smoothed away — the deltas settle into a
 smooth, steady ramp only once real motion dominates the noise floor.
 
+**A third follow-up the same day**: removed `CMD_RAWSWEEP` (and
+`STATE_RAW_SWEEP_WRITE`/`WAIT`) entirely — a deliberately dumb,
+no-smart-detection sweep left over from developing the FSM's edge
+detection (the same purpose as ServoDAQ's `naive_stall_sweep()`: a raw
+ground-truth trace to check the smart algorithm's result against). It
+was never part of `CAL` and was never exposed in `ServoCalibrator.html`,
+but per direct instruction it's not needed in the firmware at all now
+that the coarse+fine algorithm is proven. `MAX_TOKENS` dropped 4→2
+along with it (nothing else takes more than one argument). Verified on
+real hardware: `RAWSWEEP ...` now genuinely returns `ERR UNKNOWN_CMD`
+rather than just being hidden from the UI, and `CAL`/`GO` still complete
+cleanly afterward (40/40 table points, `GO` accepted).
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
