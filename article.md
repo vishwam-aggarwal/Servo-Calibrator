@@ -16,7 +16,7 @@ The fix itself isn't exotic — it's a lookup table. Instead of one straight lin
 
 ## The bench
 
-![The physical test jig: a Miuzei 25kg Servo (left, red) with the AS5600 magnetic encoder mounted directly on its output shaft, and an MG90D (right), both bolted to a 3D-printed bracket, wired to an Arduino Nano clone on a screw-terminal breakout.](/images/your-servo-is-lying-to-you/test-jig.jpg)
+![The physical test jig: a Miuzei 25kg Servo (left, red) with the AS5600 magnetic encoder mounted directly on its output shaft, and an MG90D (right), both bolted to a 3D-printed bracket, wired to an Arduino Nano clone on a screw-terminal breakout.](/images/hobby-servo-calibration/test-jig.jpg)
 
 *The actual rig, one unit at a time: a Miuzei 25kg Servo with the AS5600 mounted on it on the left, an MG90D on the right, an Arduino Nano (CH340 clone) doing the driving.*
 
