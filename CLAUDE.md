@@ -1170,6 +1170,206 @@ very close to the true edge) — both genuinely edge-triggered now, not
 exhausting the margin every time. Table build kicked off correctly
 afterward with sensible values.
 
+**A fourth follow-up the same day, and the real fix**: the fine-pass-stop
+fix above was still not the actual bug. Live TELEM inspection during a
+fresh reversal-recovery test showed the true root cause: `beginFinePass()`
+computed its margin from `lastSentUs` — wherever the coarse scan's *last
+sent* pulse happened to be, which, on a step that triggered a reversal or
+big-jump, is the bad/overshoot pulse the servo was still recovering from,
+not the confirmed-good edge one step back. Position stayed flat at the
+same value through both the margin move and the fine pass's first step —
+proof the servo hadn't actually moved yet when fine sampling started. A
+first attempted fix (routing detected reversals through the existing
+spin-recovery path) fixed the immediate symptom on one run but introduced
+a new stiction-like false stall right after recovery, and didn't
+reliably trigger on a same-shaped reversal on a later run — diagnosis
+from the outside (TELEM alone) couldn't pin down why. Per direct
+instruction ("mimic exactly what the python study did for calibration
+minus the naive run, just coarse and fine"), rebuilt the detection core
+from `ServoDAQ_Host/servo_daq.py`'s `scan_until_weak()`/`find_edge()`
+instead of continuing to patch the ad hoc version, keeping this
+firmware's FSM state-machine structure and swapping in the Python
+algorithm's actual logic:
+
+- **Per-scan self-calibrated reference rate**, not one whole-run
+  baseline: each of the 4 independent scans (coarse-down, fine-down,
+  coarse-up, fine-up) measures its own baseline step rate from its own
+  first `CAL_REFERENCE_STEPS` (5) real steps, then judges every step
+  after that as weak/reversed/an oversized jump purely relative to *that
+  scan's own rate* (`CAL_WEAKENING_FRACTION` 0.35, `CAL_BIG_JUMP_MULTIPLE`
+  3.0) — no fixed absolute-degree thresholds anywhere in the judgment.
+- **First-step exclusion.** A scan's very first real step reads
+  artificially weak (breakaway/stiction) and was corrupting the
+  reference-rate average — excluded from both edge-judgment and the
+  rate average, mirroring the identical fix already made in
+  `servo_daq.py` itself (see the "naive-sweep first-step stiction bug"
+  entry above).
+- **The actual root-cause fix**: the reported edge is now always
+  `CAL_EDGE_BACKOFF_STEPS`/`CAL_FINE_EDGE_BACKOFF_STEPS` (1/2) *good*
+  steps back from the bad one — tracked via a 2-deep history of accepted
+  `(pulse, position)` pairs — and `beginFinePass()` takes this confirmed
+  edge as an absolute target pulse, never `lastSentUs`. The margin is
+  now always measured from ground truth, never from wherever a bad step
+  left the servo sitting.
+- **A new incidental safety win**: `STATE_CAL_DOWN_WRITE`/`UP_WRITE` now
+  check `ABS_FLOOR_US`/`ABS_CEIL_US` before every step and raise a new
+  `ERR_CAL_ABS_BOUND` if exceeded, ending the run without a usable table
+  instead of relying only on `servo.attach()`'s silent PWM clamp. This
+  closes a gap this project's own README previously listed under "Known
+  Limitations" — that bullet is now removed since the check genuinely
+  exists.
+- Net removal of the old absolute-threshold machinery
+  (`CAL_STEP_DELTA_WINDOW_SAMPLES`, `stepRateBuffer[]`,
+  `updateStepRateAverage()`, `updateStepDelta()`, and related globals)
+  in favor of the smaller per-scan `resetScanState()`/`judgeScanStep()`
+  pair. Compiled smaller than before the rewrite (18812 vs. 19328 bytes
+  flash, 1345 vs. 1368 bytes RAM) despite doing strictly more (the new
+  abs-bound check included), since the removed buffers were larger than
+  what replaced them.
+
+**Verified on real hardware, twice.** A full `CAL`→`GO` run completed
+cleanly end to end (`table_count = 40`, `GO -> OK GO`, zero `ERR` lines).
+A second, more adversarial run — deliberately re-testing the exact
+reversal scenario that broke the two earlier attempts — genuinely
+exercised active recovery: the coarse-down scan's step to 300µs
+triggered a real servo spin/backoff (position jumped from -1637 to
++1908 centideg), correctly entered `CAL_RECOVER_WAIT`, and recovered
+cleanly back to the 350µs baseline with position landing at -1636 —
+effectively zero drift from the pre-spin value. The margin move that
+followed correctly targeted 450µs (350 + 100, the confirmed-good edge
+plus margin), not a value derived from the bad 300µs pulse — the exact
+bug this rewrite set out to fix. The up side in the same run reached
+2150µs before the rate-based judgment stopped it, fine-scanned back down
+into the 2055–2100µs band, and table-building kicked off immediately
+after with no errors or recovery needed on that side at all.
+
+## `GETTABLE`: an on-demand table query, and Export actually querying it (2026-08-21)
+
+Per explicit direction, added back a `GETTABLE` command — the FSM
+firmware previously had no way to return `calTable` on request at all
+(see the "FSM firmware becomes THE companion" entry above: Export was
+built entirely from whatever the app happened to capture live off a
+`CAL` run's own streamed `TABLE` lines, with no way to re-ask the
+firmware for the data afterward). Implemented, per direct instruction,
+as its own FSM state that loops through the table one entry per tick
+until all are sent — `STATE_GETTABLE_SEND`, mirroring the same
+one-thing-per-tick shape every other state in this file already uses,
+rather than dumping all 20 lines out of a single `loop()` call.
+
+- `CMD_GETTABLE` rejects `ERR NOT_CALIBRATED` the same as `GO`/`MODEL`
+  if `isCalibrated` is false. Otherwise it does **not** ack immediately
+  the way `CAL`/`GO` do — those need an instant reply because the real
+  work behind them can take up to a minute (`CAL`) or however long a
+  move takes (`GO`), so the caller can't be left blocking on one
+  `sendCommand()` promise that whole time. `GETTABLE` has no such
+  problem: all 20 points go out in `CAL_TABLE_POINTS` ticks, well under
+  a second at 50Hz, comfortably inside a normal request/response
+  timeout — so its one `OK GETTABLE` reply is deliberately held until
+  every point has actually been sent, a genuine synchronous round trip
+  rather than another acknowledge-then-stream command.
+- `tableSendRunning` (a `calibrationRunning`/`trajectoryRunning`-shaped
+  busy flag) added to the busy-gate check and to `changeState()`'s
+  `STATE_IDLE`-clearing block — `STATE_GETTABLE_SEND`'s own normal
+  finish lands directly on `STATE_IDLE` (there's nothing left to hold in
+  a separate `DONE` state the way `CAL`/`GO` do), so that block is what
+  actually clears the flag on the normal path here, not just the
+  abort/timeout paths it originally existed for.
+- `printTableEntry(idx)` factored out of `recordTableEntry()` — the
+  exact same `TABLE <idx> <pulseUs> <angleCentideg>` line shape now
+  backs both a genuinely new reading (`recordTableEntry()`, during `CAL`)
+  and an existing entry just being replayed back out
+  (`STATE_GETTABLE_SEND`), so there's one formatter instead of two that
+  could quietly drift apart.
+- `getTableIndex` is its own variable, not a reuse of `tableIndex` — the
+  two states can never run concurrently (the busy-gate rejects
+  `GETTABLE` while `calibrationRunning`), but sharing one counter across
+  two logically distinct purposes is exactly the kind of thing that
+  quietly breaks the next time that non-overlap assumption changes.
+
+**`ServoCalibrator.html`'s Export now actually queries the firmware**
+instead of only ever reusing whatever `finishCalibration()` captured
+live during the original `CAL` run: `fetchTableForExport()` sends
+`GETTABLE`, collects its `TABLE` stream (the existing `onTable` handler
+now tells a `GETTABLE` fetch's lines apart from a live `CAL`'s via a new
+`fetchingTable` flag, same line shape either way), and reframes it
+through a newly-shared `buildCalibrationFromEntries()` helper —
+extracted out of `finishCalibration()` itself, so a live-CAL-sourced
+calibration and a GETTABLE-sourced export both go through the identical
+offset/sign/points reframing instead of two copies of that logic.
+`GETTABLE` still can't survive an actual reconnect (opening the port
+always reboots the board, wiping `calTable` — same limitation as
+before), so this is specifically about decoupling Export from the live
+capture within one already-calibrated session, not about persisting
+calibration across sessions.
+
+Compiles clean: 19042 bytes flash / 1366 bytes RAM (up slightly from
+18812/1345 before this command existed, as expected for one new state
+plus one new command).
+
+**Verified end to end, firmware and browser app both.** On real
+hardware: `GETTABLE` before `CAL` correctly rejects `ERR NOT_CALIBRATED`;
+after a real `CAL` run, `GETTABLE` streams all 20 `TABLE` entries
+ascending (0→19, one per tick — successive lines land exactly 20ms
+apart in the log, matching the 50Hz tick rate), pulses 330→2075µs,
+angles -14611→9056 centideg (~236.7° stroke), then `OK GETTABLE`. On the
+actual running `ServoCalibrator.html` (`claude-in-chrome`, not a
+reimplementation): fed the real captured `TABLE` lines above into
+`link._onLine()` with `fetchingTable` true and confirmed
+`fetchedTableEntries` fills correctly and `buildCalibrationFromEntries()`
+reframes them to match a hand calculation exactly (offset `-14611`,
+sign `+1`, `points[0].angleCentideg === 0`, `maxAngleDeg === 236.67`);
+confirmed the same `onTable` gate correctly ignores a `TABLE` line when
+neither `calRunning` nor `fetchingTable` is true; confirmed a literal
+`"OK GETTABLE"` line lands in `link.lineQueue` (a genuine reply) rather
+than being misclassified as an async line.
+
+Hit two unrelated `arduino-cli` upload failures getting to that
+hardware pass, worth recording since they cost real time and weren't
+firmware bugs: first, two long hangs (stuck silently right after
+"Setting baud rate: 57600," several minutes each, no CPU activity) that
+turned out to be a Chrome tab still holding the Web Serial connection
+open — even after the user replugged the board's USB cable, a `.NET`
+`SerialPort.Open()` test straight from PowerShell still failed
+"Access is denied" until that tab was actually closed, not just the
+board power-cycled. Second, once the port was genuinely free, uploading
+with this project's usual `--fqbn arduino:avr:nano:cpu=atmega328old`
+failed cleanly (`not in sync: resp=0x00`, all 10 retries) — the
+board's actual bootloader didn't match that FQBN's assumed old-bootloader/
+57600-baud protocol at this point (confirmed independently: the user
+successfully uploaded Blink through the Arduino IDE while `arduino-cli`
+was still failing, proving the board/cable/port were never the problem).
+Dropping `cpu=atmega328old` — plain `--fqbn arduino:avr:nano`, the
+new-bootloader default — uploaded cleanly on the first try. Worth
+remembering if a future session hits the same `not in sync` failure on
+this board: try the plain FQBN before assuming a hardware fault.
+
+## The model toggle never showed the live default (2026-08-21)
+
+Real bug, caught from actual use: `GO` works from the moment a
+calibration finishes — the firmware's own `useTable` defaults `false`
+(LINEAR) at boot — but neither `Linear`/`Table` tab in the app ever
+lit up until the user happened to click one. `currentModel` starts
+`null` and `setModelButtons()` was only ever called from the two tab
+buttons' own click handlers, so the UI had no way to reflect a model
+it hadn't been told about, even though the firmware was already running
+it. Not a wrong default, a **silent** one.
+
+Fixed by calling `setModelButtons("LINEAR")` from `applyCalibration()` —
+right when a calibration finishes, the one moment this app can state the
+live model with certainty (every session boots fresh with `useTable ==
+false`, and opening the port always reboots the board, so there's no
+stale-state risk in asserting it here). Also clears the highlight
+(`setModelButtons(null)`) in `setConnectedUI(false)`'s disconnect path,
+so a stale selection from a previous board/session can't linger
+visually into a new one before it's re-established.
+
+Verified against the real running page code (`claude-in-chrome`, not a
+reimplementation), using the exact table captured during the `GETTABLE`
+verification above: before `applyCalibration()`, neither tab has the
+`active` class; immediately after, `Linear` does (`currentModel ===
+"LINEAR"`) and `Table` doesn't; after a simulated disconnect, both
+clear and `currentModel` returns to `null`.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
