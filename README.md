@@ -18,9 +18,14 @@ code.
 No install, no build step. It's one HTML file that talks to an Arduino
 over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API).
 
-> **Status:** built and tested against real hardware (an AS5600 + a
-> generic analog servo on an Arduino Nano clone), including a full
-> calibrate → drive → export → import → drive round-trip. See
+> **Status:** the firmware is a self-contained FSM (`ServoCalibrator_Companion.ino`)
+> verified against real hardware, including a full calibrate → drive
+> round-trip. The app (`ServoCalibrator.html`) was rewritten against
+> that firmware and verified against the real page code — real captured
+> hardware wire data fed straight into `SerialLink`, calibration
+> parsing, and the charts — but **not yet exercised through an actual
+> live `navigator.serial` session** (the browser's native port picker
+> needs a human at the keyboard; that pass is still open). See
 > [Known limitations](#known-limitations) for what's still rough. **The
 > firmware depends on two of my other libraries that aren't public
 > yet** — see [Dependencies](#requirements--dependencies) before you try
@@ -33,7 +38,7 @@ over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_AP
 - [What it looks like in use](#what-it-looks-like-in-use)
 - [How it works](#how-it-works)
 - [The calibration table & Universal-Motor-Interface](#the-calibration-table--universal-motor-interface)
-- [Import / export](#import--export)
+- [Export](#export)
 - [Wiring](#wiring)
 - [Requirements & dependencies](#requirements--dependencies)
 - [Safety notes](#safety-notes)
@@ -79,14 +84,19 @@ application code.
    then open `http://localhost:8000/ServoCalibrator.html` in **Chrome or
    Edge** (Web Serial isn't implemented in Firefox or Safari).
 4. **Connect, then Calibrate.** Click *Connect…*, pick your serial port
-   in the browser's device picker, then click **Calibrate** — one button,
-   a few minutes, fully automated. Once it finishes, the command/chart
-   interface below unlocks. Every large move the firmware makes during
-   `CALIBRATE`/`IMPORT` is deliberately slow and incremental (small steps,
-   a short pause between each) rather than one instant jump — found to
-   be necessary against at least one real servo that behaved oddly when
-   commanded a big pulse change in one shot (see `CLAUDE.md` for the
-   story); it's expected, not a stall.
+   in the browser's device picker, then click **Calibrate** — one
+   button, fully automated, usually done in under a minute. The command
+   acknowledges immediately and the run streams progress asynchronously;
+   the command/chart interface below unlocks once the app sees the
+   table finish (there's no separate "done" reply — see
+   [Serial protocol reference](#serial-protocol-reference)). Every large
+   move the firmware makes during calibration is deliberately slow and
+   incremental (small steps, a short pause between each) rather than one
+   instant jump — found to be necessary against at least one real servo
+   that behaved oddly when commanded a big pulse change in one shot (see
+   `CLAUDE.md` for the story); it's expected, not a stall. This firmware
+   doesn't remember a calibration across a reconnect — recalibrate fresh
+   every session.
 
 ## What it looks like in use
 
@@ -98,12 +108,14 @@ application code.
   build a 20-point direction-averaged table. Progress streams into the
   log live. Result: a summary (`350–2630µs · 214.01° stroke · 20-point
   table`) and an **Export table…** button.
-- **Live trace**: command a single step, a continuous *post-trajectory*
-  square wave (every edge still a real, v<sub>max</sub>/a<sub>max</sub>-limited
-  trapezoidal move — just auto-repeating), or a continuous sine wave that
-  deliberately skips trajectory shaping entirely. Three auto-scaled
-  rolling charts (position, velocity, error) show setpoint vs.
-  AS5600-measured actual, live.
+- **Live trace**: command a single point-to-point move (a real,
+  v<sub>max</sub>/a<sub>max</sub>-limited trapezoidal move to a target
+  angle — no continuous square-wave/sine-wave generator; this firmware
+  deliberately only ever streams one planned move at a time). Three
+  auto-scaled rolling charts (position, velocity, error) show setpoint
+  vs. AS5600-measured actual, live — velocity's "actual" trace comes
+  straight from the firmware's own encoder-derivative measurement, not a
+  client-side numeric differentiation.
 - **See the table's improvement, interactively**: a live toggle switches
   between the plain 2-point linear formula and the just-calibrated
   20-point table — mid-move, without touching whatever's currently
@@ -116,18 +128,25 @@ application code.
 
 Two pieces:
 
-- **`ServoCalibrator_Companion.ino`** — runs both the calibration
-  routine and live trajectory execution itself, on-device.
-  `CALIBRATE` is a deliberately blocking, one-shot routine (like a human
-  would expect a physical range-finding sweep to occupy the board for
-  its own duration); once calibrated, [`TrapezoidalProfile`](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface)
-  is planned/evaluated on-device at a fixed ~50Hz alongside continuous
-  telemetry streaming, independent of the host — the app never paces
-  the motion, it only sends target/limit commands and plots what comes
-  back.
+- **`ServoCalibrator_Companion.ino`** — a self-contained finite state
+  machine, one `switch`/`case` in `loop()`, fixed 50Hz tick, running
+  both the calibration routine and trajectory execution itself,
+  on-device. Unlike a blocking one-shot design, `CAL` acknowledges
+  immediately and the calibration routine runs as part of the normal
+  tick loop — the board never stops responding to serial while it runs
+  (`PING`/`ABORT` both still work mid-calibration). Once calibrated,
+  [`TrapezoidalProfile`](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface)
+  is planned/evaluated on-device at that same fixed ~50Hz, alongside
+  telemetry that streams unconditionally every tick regardless of
+  state — the app never paces the motion, it only sends target/limit
+  commands and plots what comes back.
 - **`ServoCalibrator.html`** — the app. Connection, calibration
-  triggering/import/export, and the three live charts all live here;
-  the firmware doesn't know anything about SVG or JSON.
+  triggering/export, and the three live charts all live here; the
+  firmware doesn't know anything about SVG or JSON. Because the
+  firmware's own calibration table isn't re-anchored to a 0° low
+  endpoint (see [Serial protocol reference](#serial-protocol-reference)),
+  the app does that framing itself, client-side, so the UI still
+  presents the established physical `[0, maxAngleDeg]` convention.
 
 ## The calibration table & Universal-Motor-Interface
 
@@ -144,29 +163,23 @@ error 2–6× vs. the linear formula, for ~80 bytes of `PROGMEM`.
 The old wizard-based version of this repo did (see git history) — this
 version doesn't, because direction, logical zero, and mounting offset are
 all *installation*-specific decisions this characterization-only tool has
-no way to know. Export the table (see [below](#import--export)), paste
-its points into a `PROGMEM` array in your own project, and pass it to
+no way to know. Export the table (see [below](#export)), paste its
+points into a `PROGMEM` array in your own project, and pass it to
 `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s table-accepting constructor
 overload alongside whatever direction/offset your actual installation
 needs.
 
-## Import / export
+## Export
 
-- **Export** downloads the current calibration (whether freshly
-  calibrated or previously imported) as a small JSON file:
-  `{maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}, …]}`.
-- **Import** loads a previously-exported file and pushes it to the board
-  over serial (`IMPORT` — same fields, same order) — skips the full
-  physical stall-scan/sweep, but still does a physical re-anchor (up to
-  3 moves) to re-zero the AS5600's live reference for the current
-  session/mounting, since an imported table carries the pulse curve but
-  not a live sensor zero reference. Those moves are the same slow,
-  incremental kind `CALIBRATE` uses (see [Quick start](#quick-start)) —
-  if the servo's current position is far from the table's `minPulseUs`,
-  the first one alone can take 20+ seconds; the app's own `IMPORT`
-  timeout is generous (90s) to match. Reconnecting to a board that's
-  still calibrated (never reset since) also auto-recovers that state on
-  connect, without needing to re-import anything.
+**Export** downloads the current calibration as a small JSON file:
+`{maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}, …]}`
+(already re-anchored to the app's own `[0, maxAngleDeg]` framing — see
+[How it works](#how-it-works)). There's no matching **Import** — this
+firmware has no command that accepts a pushed-in table, unlike its
+predecessor. Every session starts uncalibrated; re-run Calibrate each
+time you reconnect or reset the board. Export exists purely for keeping
+a record of what a servo measured at, not for skipping a future physical
+recalibration of that same servo.
 
 ## Wiring
 
@@ -210,54 +223,98 @@ Firefox or Safari.
 
 - **Calibrate with a bare horn.** No linkage, mechanism, gearbox, or load
   attached — a loaded mechanism can make a stall look like normal
-  resistance and vice versa. Recalibrate (re-run `CALIBRATE`) if you
-  change the mechanical load after the fact.
-- `CALIBRATE` deliberately drives the servo into its mechanical end stops
-  to find them. It stops advancing within a small margin of first
-  detecting no motion, so it only grinds against a stop briefly — but it
-  is intentionally doing that, twice (once per direction), by design.
-- A hard pulse-width safety ceiling (80–3100µs, fixed in firmware —
-  widened once already from a narrower default after a real servo's real
-  range fell outside it) exists as a fail-safe in case stall detection
-  doesn't trigger for some reason (e.g. an encoder fault) —
-  `CALIBRATE` aborts with a clear error instead of silently accepting a
-  bad range if either scan hits it. If that happens to you, it likely
-  means your servo's real range is wider than this default too — widen
-  `ABS_FLOOR_US`/`ABS_CEIL_US` in the firmware and reflash.
+  resistance and vice versa. Recalibrate (re-run `CAL`) if you change the
+  mechanical load after the fact.
+- `CAL` deliberately drives the servo into its mechanical end stops to
+  find them (with active recovery if the servo spins past a limit
+  instead of stalling, rather than just timing out — see `CLAUDE.md`).
+  It stops advancing within a small margin of first detecting no motion,
+  so it only grinds against a stop briefly — but it is intentionally
+  doing that, twice (once per direction), by design.
+- A hard pulse-width safety ceiling (80–3100µs, fixed in firmware) exists
+  as a fail-safe in case stall detection doesn't trigger for some reason
+  (e.g. an encoder fault) — a scan hitting it ends the run without a
+  usable table, rather than silently accepting a bad range. If that
+  happens to you, it likely means your servo's real range is wider than
+  this default too — widen `ABS_FLOOR_US`/`ABS_CEIL_US` in the firmware
+  and reflash.
 
 ## Serial protocol reference
 
-115200 baud, one command per line, newline-terminated ASCII:
+115200 baud, one command per line, newline-terminated ASCII. Genuinely
+different in shape from the predecessor firmware this repo used to have
+at this path — see `CLAUDE.md`'s 2026-08-21 entry for the full design
+story if you're diffing against an older version of this doc.
 
 | Command | Response |
 |---|---|
-| `PING` | `OK PONG` |
-| `CALIBRATE` | `CALRESULT <maxAngleDeg> <minPulseUs> <maxPulseUs> <pulse0> <cdeg0> … <pulse19> <cdeg19>` \| `ERR CAL_FAILED <reason>` |
-| `GETTABLE` | same shape as `CALRESULT` \| `ERR NOT_CALIBRATED` |
-| `IMPORT <maxAngleDeg> <minPulseUs> <maxPulseUs> <pulse0> <cdeg0> … <pulse19> <cdeg19>` | `OK` \| `ERR <msg>` |
-| `GO <targetDeg> <vMaxDegS> <aMaxDegS2>` | `OK` \| `ERR <msg>` |
-| `SQUARE <lowDeg> <highDeg> <periodS> <vMaxDegS> <aMaxDegS2>` | `OK` \| `ERR <msg>` |
-| `SINE <centerDeg> <amplitudeDeg> <freqHz>` | `OK` \| `ERR <msg>` |
-| `STOP` | `OK` |
-| `MODEL LINEAR\|TABLE` | `OK` \| `ERR <msg>` |
+| `PING` | `OK PING` |
+| `CAL` | `OK CAL` — acknowledges immediately; the run itself streams asynchronously (see below), no final reply |
+| `ABORT` | `OK ABORT` \| `ERR ALREADY_IDLE` — cancels a calibration *or* a move; exempt from the busy-gate below |
+| `ACCEL <aMaxDegS2>` | `OK ACCEL` |
+| `VEL <vMaxDegS>` | `OK VEL` |
+| `POS <targetDeg>` | `OK POS` — **not range-checked server-side**; the app clamps client-side instead |
+| `GO` | `OK GO` \| `ERR NOT_CALIBRATED` — starts a move to the most recently set `POS`, at the most recent `ACCEL`/`VEL` |
+| `MODEL LINEAR\|TABLE` | `OK MODEL` \| `ERR NOT_CALIBRATED` |
 
-`GO`/`SQUARE`/`SINE`/`MODEL` all return `ERR NOT_CALIBRATED` until a
-`CALIBRATE` or `IMPORT` has succeeded. Once calibrated, telemetry streams
-continuously at ~50Hz regardless of whether a move is active:
+While a calibration or move is running, every command except `ABORT` and
+`PING` is rejected with `ERR BUSY`.
+
+**Calibration streams three line shapes while it runs**, none of them a
+reply to any pending command:
 
 ```
-T,<t_ms>,<setpoint_deg>,<setpoint_vel_degs>,<actual_deg>,<mode>,<model>
+<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <rawPos>
+<elapsedMs> TABLE <index> <pulseUs> <angleCentideg> <rawPos>
+<elapsedMs> ERR <code> <rawPos>
 ```
 
-`<mode>` is `IDLE`/`MOVE`/`SQUARE`/`SINE`, `<model>` is `LINEAR`/`TABLE` —
-both sent explicitly (not left for the host to infer) so a live `MODEL`
-switch, or a sine's velocity legitimately crossing zero without actually
-stopping, both show up unambiguously in the stream. Lines starting with
-`#` are informational (boot banner, `CALIBRATE` progress) — not part of
-the command/response or telemetry protocol.
+`TABLE` fires twice per index (20 points, down-pass then up-pass —
+the up-pass value is the final, direction-averaged one); the app detects
+completion by recognizing index 19 arriving *ascending* (immediately
+after index 18), since there's no dedicated "done" message. `angleCentideg`
+is a **raw** encoder reading relative to wherever the board happened to
+boot — not re-anchored so index 0 reads exactly 0° the way the old
+firmware's table was; the app reframes it client-side (see
+[How it works](#how-it-works)). `ERR` here is an asynchronous internal
+failure (e.g. a settle timing out), not a synchronous command rejection.
+
+Once calibrated, telemetry streams every tick (~50Hz), unconditionally,
+regardless of state:
+
+```
+TELEM <ms> <targetCentideg> <targetVelCentidegPerSec> <actualCentideg> <actualVelCentidegPerSec>
+```
+
+No mode/model field (unlike the old `T,...` line) — the app tracks which
+model is live itself, since only it ever changes `MODEL`. A completed
+move is signaled by exactly one `PROGRESS TRAJ_WAIT ...` line, printed
+the instant the shaft settles. Lines starting with `#` are informational
+(boot banner) — not part of the command/response or telemetry protocol.
 
 ## Known limitations
 
+- **The browser app hasn't been exercised against a real live serial
+  connection yet** — verified by feeding real captured hardware wire
+  data directly into the actual page code (`claude-in-chrome`, not a
+  reimplementation), but the `navigator.serial` port-picker itself needs
+  a human at the keyboard to click through, and that pass hasn't
+  happened yet.
+- **No calibration persists across a reconnect.** This firmware has no
+  `GETTABLE`-equivalent — recalibrate every session, even if the board
+  itself was never reset.
+- **No table import**, only export — there's no command this firmware
+  accepts a pushed-in table through. Export is for record-keeping, not
+  for skipping a future recalibration.
+- **The stall-scan's absolute pulse-width safety ceiling
+  (`ABS_FLOOR_US`/`ABS_CEIL_US`) is enforced only by `servo.attach()`'s
+  own silent PWM clamp**, not by an explicit "hit the bound → abort with
+  a clear error" check the way the predecessor firmware had. In practice
+  the scan's own stall/reversal/anomaly detection (plus active
+  spin-recovery) stops it well before this matters, but there's no
+  dedicated fail-safe error path left if those all somehow fail to
+  trigger — worth hardening if this firmware sees a servo class none of
+  this project's testing has hit yet.
 - Tested on Chrome/Edge over `http://localhost`; opening the app
   directly via `file://` has not been confirmed to work reliably with
   Web Serial.
