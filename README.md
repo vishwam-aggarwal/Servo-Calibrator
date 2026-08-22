@@ -100,14 +100,15 @@ application code.
 
 ## What it looks like in use
 
-- **Calibration**: click Calibrate. The firmware stall-scans outward from
-  center in both directions (a sliding-window net-delta check, not a
-  single-step one — a mechanism visibly slows before it actually stops,
-  and a naive check false-triggers on that creep) to find the real safe
-  pulse range, then sweeps that range twice (once each direction) to
-  build a 20-point direction-averaged table. Progress streams into the
-  log live. Result: a summary (`350–2630µs · 214.01° stroke · 20-point
-  table`) and an **Export table…** button.
+- **Calibration**: click Calibrate. The firmware coarse-then-fine scans
+  outward from center in both directions — each scan self-calibrates its
+  own baseline step rate from its first few real steps, then watches
+  every step after that for a weak, reversed, or oversized-jump response
+  *relative to that rate* (no fixed threshold) — to find the real safe
+  pulse range, then sweeps it twice (once each direction) to build a
+  20-point direction-averaged table. Progress streams into the log live.
+  Result: a summary (`350–2630µs · 214.01° stroke · 20-point table`) and
+  an **Export table…** button.
 - **Live trace**: command a single point-to-point move (a real,
   v<sub>max</sub>/a<sub>max</sub>-limited trapezoidal move to a target
   angle — no continuous square-wave/sine-wave generator; this firmware
@@ -306,15 +307,6 @@ the instant the shaft settles. Lines starting with `#` are informational
 - **No table import**, only export — there's no command this firmware
   accepts a pushed-in table through. Export is for record-keeping, not
   for skipping a future recalibration.
-- **The stall-scan's absolute pulse-width safety ceiling
-  (`ABS_FLOOR_US`/`ABS_CEIL_US`) is enforced only by `servo.attach()`'s
-  own silent PWM clamp**, not by an explicit "hit the bound → abort with
-  a clear error" check the way the predecessor firmware had. In practice
-  the scan's own stall/reversal/anomaly detection (plus active
-  spin-recovery) stops it well before this matters, but there's no
-  dedicated fail-safe error path left if those all somehow fail to
-  trigger — worth hardening if this firmware sees a servo class none of
-  this project's testing has hit yet.
 - Tested on Chrome/Edge over `http://localhost`; opening the app
   directly via `file://` has not been confirmed to work reliably with
   Web Serial.
