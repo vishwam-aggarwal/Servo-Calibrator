@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Internal Claude Code working notes -- development narrative, not
+# meant for public consumption. Kept locally only, never pushed.
+CLAUDE.md
