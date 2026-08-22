@@ -1170,6 +1170,79 @@ very close to the true edge) — both genuinely edge-triggered now, not
 exhausting the margin every time. Table build kicked off correctly
 afterward with sensible values.
 
+**A fourth follow-up the same day, and the real fix**: the fine-pass-stop
+fix above was still not the actual bug. Live TELEM inspection during a
+fresh reversal-recovery test showed the true root cause: `beginFinePass()`
+computed its margin from `lastSentUs` — wherever the coarse scan's *last
+sent* pulse happened to be, which, on a step that triggered a reversal or
+big-jump, is the bad/overshoot pulse the servo was still recovering from,
+not the confirmed-good edge one step back. Position stayed flat at the
+same value through both the margin move and the fine pass's first step —
+proof the servo hadn't actually moved yet when fine sampling started. A
+first attempted fix (routing detected reversals through the existing
+spin-recovery path) fixed the immediate symptom on one run but introduced
+a new stiction-like false stall right after recovery, and didn't
+reliably trigger on a same-shaped reversal on a later run — diagnosis
+from the outside (TELEM alone) couldn't pin down why. Per direct
+instruction ("mimic exactly what the python study did for calibration
+minus the naive run, just coarse and fine"), rebuilt the detection core
+from `ServoDAQ_Host/servo_daq.py`'s `scan_until_weak()`/`find_edge()`
+instead of continuing to patch the ad hoc version, keeping this
+firmware's FSM state-machine structure and swapping in the Python
+algorithm's actual logic:
+
+- **Per-scan self-calibrated reference rate**, not one whole-run
+  baseline: each of the 4 independent scans (coarse-down, fine-down,
+  coarse-up, fine-up) measures its own baseline step rate from its own
+  first `CAL_REFERENCE_STEPS` (5) real steps, then judges every step
+  after that as weak/reversed/an oversized jump purely relative to *that
+  scan's own rate* (`CAL_WEAKENING_FRACTION` 0.35, `CAL_BIG_JUMP_MULTIPLE`
+  3.0) — no fixed absolute-degree thresholds anywhere in the judgment.
+- **First-step exclusion.** A scan's very first real step reads
+  artificially weak (breakaway/stiction) and was corrupting the
+  reference-rate average — excluded from both edge-judgment and the
+  rate average, mirroring the identical fix already made in
+  `servo_daq.py` itself (see the "naive-sweep first-step stiction bug"
+  entry above).
+- **The actual root-cause fix**: the reported edge is now always
+  `CAL_EDGE_BACKOFF_STEPS`/`CAL_FINE_EDGE_BACKOFF_STEPS` (1/2) *good*
+  steps back from the bad one — tracked via a 2-deep history of accepted
+  `(pulse, position)` pairs — and `beginFinePass()` takes this confirmed
+  edge as an absolute target pulse, never `lastSentUs`. The margin is
+  now always measured from ground truth, never from wherever a bad step
+  left the servo sitting.
+- **A new incidental safety win**: `STATE_CAL_DOWN_WRITE`/`UP_WRITE` now
+  check `ABS_FLOOR_US`/`ABS_CEIL_US` before every step and raise a new
+  `ERR_CAL_ABS_BOUND` if exceeded, ending the run without a usable table
+  instead of relying only on `servo.attach()`'s silent PWM clamp. This
+  closes a gap this project's own README previously listed under "Known
+  Limitations" — that bullet is now removed since the check genuinely
+  exists.
+- Net removal of the old absolute-threshold machinery
+  (`CAL_STEP_DELTA_WINDOW_SAMPLES`, `stepRateBuffer[]`,
+  `updateStepRateAverage()`, `updateStepDelta()`, and related globals)
+  in favor of the smaller per-scan `resetScanState()`/`judgeScanStep()`
+  pair. Compiled smaller than before the rewrite (18812 vs. 19328 bytes
+  flash, 1345 vs. 1368 bytes RAM) despite doing strictly more (the new
+  abs-bound check included), since the removed buffers were larger than
+  what replaced them.
+
+**Verified on real hardware, twice.** A full `CAL`→`GO` run completed
+cleanly end to end (`table_count = 40`, `GO -> OK GO`, zero `ERR` lines).
+A second, more adversarial run — deliberately re-testing the exact
+reversal scenario that broke the two earlier attempts — genuinely
+exercised active recovery: the coarse-down scan's step to 300µs
+triggered a real servo spin/backoff (position jumped from -1637 to
++1908 centideg), correctly entered `CAL_RECOVER_WAIT`, and recovered
+cleanly back to the 350µs baseline with position landing at -1636 —
+effectively zero drift from the pre-spin value. The margin move that
+followed correctly targeted 450µs (350 + 100, the confirmed-good edge
+plus margin), not a value derived from the bad 300µs pulse — the exact
+bug this rewrite set out to fix. The up side in the same run reached
+2150µs before the rate-based judgment stopped it, fine-scanned back down
+into the 2055–2100µs band, and table-building kicked off immediately
+after with no errors or recovery needed on that side at all.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
