@@ -4,43 +4,43 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Servo Calibrator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+/>
 <style>
+  /*
+    Palette/typography match vishwamaggarwal.com's own "blueprint" theme
+    exactly (see the website repo's src/styles/global.css and
+    STYLE_GUIDE.md) -- same hex values, same fonts, so this standalone
+    app doesn't look like a different product from the page that links
+    to it. Deliberately single dark theme, no light/dark toggle, for the
+    same reason the rest of the site has none: a blueprint is
+    definitionally dark blue with pale linework. Every variable NAME
+    below is unchanged from before (the script/markup reference them by
+    name), only the values changed -- this is a reskin, not a rewrite.
+  */
   :root {
-    color-scheme: light;
-    --page:        #f7f6f3;
-    --surface:     #fcfcfb;
-    --surface-2:   #f2f1ed;
-    --text-1:      #14171a;
-    --text-2:      #4b5058;
-    --text-muted:  #7a7d82;
-    --border:      rgba(20,23,26,0.10);
-    --border-2:    rgba(20,23,26,0.18);
-    --down:        #2a78d6;   /* setpoint / linear model */
-    --up:          #eb6834;   /* actual */
-    --ref:         #1baf7a;   /* table model */
-    --grid:        #e4e3de;
-    --axis:        #c7c6c0;
-    --good:        #0ca30c;
-    --warn:        #fab219;
-    --crit:        #d03b3b;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --page:#0d0f11; --surface:#16181b; --surface-2:#1c1f22;
-      --text-1:#f5f6f7; --text-2:#c4c7cc; --text-muted:#82868c;
-      --border:rgba(255,255,255,0.10); --border-2:rgba(255,255,255,0.18);
-      --down:#3987e5; --up:#d95926; --ref:#199e70;
-      --grid:#26292d; --axis:#34383d; --good:#0ca30c; --warn:#fab219; --crit:#e66767;
-    }
-  }
-  :root[data-theme="dark"] {
     color-scheme: dark;
-    --page:#0d0f11; --surface:#16181b; --surface-2:#1c1f22;
-    --text-1:#f5f6f7; --text-2:#c4c7cc; --text-muted:#82868c;
-    --border:rgba(255,255,255,0.10); --border-2:rgba(255,255,255,0.18);
-    --down:#3987e5; --up:#d95926; --ref:#199e70;
-    --grid:#26292d; --axis:#34383d; --good:#0ca30c; --warn:#fab219; --crit:#e66767;
+    --page:        #102C44;   /* site --bg */
+    --surface:     #17395A;   /* site --bg-raised -- card backgrounds */
+    --surface-2:   #1D4266;   /* site --bg-raised-alt -- nested/chart-plot backgrounds */
+    --text-1:      #F3F8FC;   /* site --text */
+    --text-2:      #A9C7DE;   /* site --text-dim */
+    --text-muted:  #6E93B1;   /* site --text-faint */
+    --border:      #2C5678;   /* site --border */
+    --border-2:    #3F7096;   /* site --border-strong */
+    --down:        #F2A93C;   /* site --accent -- setpoint / linear model / primary actions */
+    --up:          #8FD3F4;   /* site --series-1 -- actual (measured) / linear-model trace */
+    --ref:         #4FD8B0;   /* teal, distinct third series -- table model */
+    --grid:        rgba(230, 242, 250, 0.05);   /* site --grid */
+    --axis:        #3F7096;   /* site --border-strong */
+    --good:        #4FD8B0;
+    --warn:        #F2A93C;
+    --crit:        #EF6F6C;   /* site --danger */
+    --shadow:      0 0 0 1px rgba(230,242,250,0.06), 0 14px 32px -16px rgba(4,12,20,0.65);
   }
 
   * { box-sizing: border-box; }
@@ -48,23 +48,27 @@
   body {
     background: var(--page);
     color: var(--text-1);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     height: 100vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
-  .mono { font-family: ui-monospace, "Cascadia Mono", "Consolas", "Liberation Mono", Menlo, monospace; }
+  .mono { font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
 
   .page { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 18px 22px 16px; gap: 14px; max-width: 1600px; width: 100%; margin: 0 auto; }
 
   header { flex: none; display: flex; flex-direction: column; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
   .eyebrow {
-    font-family: ui-monospace, monospace; font-size: 10.5px; font-weight: 600;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600;
     letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-muted);
   }
-  h1 { margin: 0; font-size: clamp(19px, 2.4vw, 24px); font-weight: 650; letter-spacing: -0.01em; }
+  h1 {
+    margin: 0; font-family: "Big Shoulders Display", "Archivo", sans-serif;
+    font-size: clamp(19px, 2.4vw, 26px); font-weight: 800; letter-spacing: 0.005em;
+    text-transform: uppercase; line-height: 1.08;
+  }
   .subhead { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); max-width: 92ch; }
 
   /* ---- Side-by-side layout: controls on the left, charts on the
@@ -80,8 +84,9 @@
 
   section.card {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 5px;
+    border: 1.5px solid var(--border-2);
+    border-radius: 2px;
+    box-shadow: var(--shadow);
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
@@ -98,14 +103,14 @@
 
   .pill {
     display: inline-flex; align-items: center; gap: 5px;
-    font-size: 10.5px; font-weight: 600; padding: 3px 9px; border-radius: 100px;
-    font-family: ui-monospace, monospace;
+    font-size: 10.5px; font-weight: 600; padding: 0.15em 0.55em; border-radius: 2px;
+    font-family: "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .pill.status-off    { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border-2); }
-  .pill.status-good   { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
-  .pill.status-warn   { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
-  .pill.status-crit   { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); }
-  .pill.status-info   { background: color-mix(in srgb, var(--down) 18%, transparent); color: var(--down); }
+  .pill.status-off    { background: rgba(230, 242, 250, 0.06); color: var(--text-muted); border: 1px solid var(--border); }
+  .pill.status-good   { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 35%, transparent); }
+  .pill.status-warn   { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+  .pill.status-crit   { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent); }
+  .pill.status-info   { background: color-mix(in srgb, var(--down) 18%, transparent); color: var(--down); border: 1px solid color-mix(in srgb, var(--down) 35%, transparent); }
   .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
   .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 10px; }
@@ -113,9 +118,9 @@
   .field label { font-size: 10.5px; font-weight: 600; color: var(--text-2); }
   .field .hint { font-size: 9.5px; color: var(--text-muted); line-height: 1.4; grid-column: 1 / -1; }
   input[type="number"] {
-    font-family: ui-monospace, monospace; font-size: 12.5px;
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
     background: var(--surface-2); color: var(--text-1);
-    border: 1px solid var(--border-2); border-radius: 4px;
+    border: 1px solid var(--border-2); border-radius: 2px;
     padding: 6px 8px; width: 100%;
   }
   input:focus, button:focus-visible { outline: 2px solid var(--down); outline-offset: 1px; }
@@ -123,12 +128,15 @@
 
   button {
     font: inherit; font-size: 12.5px; font-weight: 600;
-    padding: 7px 14px; border-radius: 4px; border: 1px solid var(--border-2);
+    padding: 0.6rem 1.1rem; border-radius: 2px; border: 1.5px solid var(--border-2);
     background: var(--surface-2); color: var(--text-1); cursor: pointer;
+    box-shadow: var(--shadow);
   }
-  button.primary { background: var(--down); border-color: var(--down); color: #fff; }
-  button.primary:hover { filter: brightness(1.08); }
-  button.danger { background: var(--crit); border-color: var(--crit); color: #fff; }
+  button:hover:not(:disabled) { border-color: var(--down); color: var(--down); }
+  button.primary { background: var(--down); border-color: var(--down); color: var(--page); font-weight: 700; }
+  button.primary:hover:not(:disabled) { background: var(--text-1); border-color: var(--text-1); color: var(--page); }
+  button.danger { background: var(--crit); border-color: var(--crit); color: var(--page); font-weight: 700; }
+  button.danger:hover:not(:disabled) { background: var(--text-1); border-color: var(--text-1); color: var(--page); }
   button.full { width: 100%; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -136,14 +144,14 @@
   .model-row { display: flex; flex-direction: column; gap: 5px; }
   .model-label { font-size: 10.5px; font-weight: 600; color: var(--text-2); }
   .model-label .hint { font-weight: 400; text-transform: none; letter-spacing: normal; }
-  .tab-row { display: flex; gap: 4px; background: var(--surface-2); border-radius: 5px; padding: 3px; }
-  .model-btn { flex: 1; background: transparent; border: none; padding: 6px 8px; font-size: 11.5px; font-weight: 650; color: var(--text-muted); border-radius: 4px; cursor: pointer; }
+  .tab-row { display: flex; gap: 4px; background: var(--surface-2); border-radius: 2px; padding: 3px; border: 1px solid var(--border); }
+  .model-btn { flex: 1; background: transparent; border: none; padding: 6px 8px; font-size: 11.5px; font-weight: 650; color: var(--text-muted); border-radius: 2px; cursor: pointer; }
   .model-btn.active { background: color-mix(in srgb, var(--m-color) 20%, var(--surface)); color: var(--m-color); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m-color) 45%, transparent); }
 
   .readout-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
   .readout { display: flex; flex-direction: column; gap: 1px; }
   .readout-label { font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.03em; text-transform: uppercase; }
-  .readout-value { font-family: ui-monospace, monospace; font-size: 16px; font-weight: 650; }
+  .readout-value { font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 650; }
 
   .charts { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
   .chart-block { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; }
@@ -153,26 +161,26 @@
   .legend .item { display: flex; align-items: center; gap: 4px; }
   .legend .swatch { width: 9px; height: 2.5px; border-radius: 2px; }
   .chart-wrap { flex: 1; min-height: 0; }
-  svg.chart { width: 100%; height: 100%; display: block; overflow: visible; background: var(--surface-2); border-radius: 4px; }
+  svg.chart { width: 100%; height: 100%; display: block; overflow: visible; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; }
   .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
   .zero-line { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
   .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
-  .tick-label { font-family: ui-monospace, monospace; font-size: 9px; fill: var(--text-muted); }
+  .tick-label { font-family: "IBM Plex Mono", monospace; font-size: 9px; fill: var(--text-muted); }
   .series-path { fill: none; stroke-width: 1.7; }
 
   .log-box {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
-    padding: 6px 8px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.55;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px;
+    padding: 6px 8px; font-family: "IBM Plex Mono", monospace; font-size: 10px; line-height: 1.55;
     color: var(--text-muted); max-height: 90px; overflow-y: auto; white-space: pre-wrap;
   }
-  .cal-summary { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-2); }
+  .cal-summary { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-2); }
 </style>
 </head>
 <body>
 <div class="page">
 
   <header>
-    <div class="eyebrow">Universal-Motor-Interface + Universal-Trajectory-Interface companion tool</div>
+    <div class="eyebrow">Universal-Trajectory-Interface companion tool</div>
     <h1>Servo Calibrator</h1>
     <p class="subhead">
       One button finds a servo's real pulse range and builds a 20-point calibration table, fully automated.
