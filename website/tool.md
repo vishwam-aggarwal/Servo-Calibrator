@@ -1,6 +1,9 @@
 ---
 title: "Servo Calibrator"
 description: "A one-button browser tool that finds a hobby servo's real pulse range and builds a 20-point calibration table, using an AS5600 magnetic encoder as ground truth."
+tags: ["Web Serial", "Robotics", "Arduino"]
+status: active
+repo: "https://github.com/vishwam-aggarwal/Servo-Calibrator"
 draft: true
 ---
 
@@ -20,13 +23,22 @@ Everything else is ordinary wiring: servo signal to a digital pin (`A3` in the s
 
 The one thing worth getting right is power. **Run the servo off its own external 4.8&ndash;6V supply, not the Arduino's 5V or Vin pin** — a small board's onboard regulator generally can't source a servo's stall current. 4.8&ndash;6V covers most hobby servos, but check your particular servo's datasheet before wiring it up; some digital servos want a narrower or higher range. Either way, tie that supply's ground to the Arduino's ground, or both the encoder readings and the servo's behavior get unreliable.
 
-## Getting it running
+## Getting the firmware to compile
 
-1. **Install two libraries in the Arduino IDE** — both free, no private access needed:
-   - **`AS5600`** (RobTillaart's) via Library Manager (`Sketch → Include Library → Manage Libraries…`, search `AS5600`), or `arduino-cli lib install "AS5600"`.
-   - **[Universal-Trajectory-Interface](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface)** — not in Library Manager's index, so install it manually: download the repo as a ZIP from GitHub and use `Sketch → Include Library → Add .ZIP Library…`, or `git clone` it straight into your sketchbook's `libraries/` folder. Restart the IDE if it was already open.
-2. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino` from the [GitHub repo](https://github.com/vishwam-aggarwal/Servo-Calibrator) in the Arduino IDE and upload it to your board, same as any other sketch. Servo signal is fixed at pin `A3` in the sketch (edit `SERVO_PIN` if you need a different one).
-3. **Serve the app.** `ServoCalibrator.html` needs `http://`, not a `file://` URL, for Web Serial to work reliably — `python -m http.server 8000` from the folder it's in, then open it in **Chrome or Edge** (Web Serial isn't implemented in Firefox or Safari).
-4. **Connect, then Calibrate.** Click *Connect…*, pick your board's serial port, then click **Calibrate**. One button, fully automated — the trajectory/chart interface unlocks once the sweep finishes.
+The sketch depends on one sibling library beyond the standard Arduino ones, so a fresh Arduino IDE install needs one extra step before `ServoCalibrator_Companion.ino` will build:
+
+1. **Install AS5600** (RobTillaart's) — it's in the Library Manager's index, so `Sketch → Include Library → Manage Libraries…`, search `AS5600`, install the one by RobTillaart. Or from the command line: `arduino-cli lib install "AS5600"`.
+2. **Add Universal-Trajectory-Interface as a library** — this is the step that trips people up, since it isn't in Library Manager's index. Either:
+   - Download the [Universal-Trajectory-Interface repo](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface) as a ZIP (`Code → Download ZIP`) and use `Sketch → Include Library → Add .ZIP Library…`, pointing at that ZIP — the IDE unpacks it into your sketchbook's `libraries/` folder itself; or
+   - `git clone` it straight into your sketchbook's `libraries/` folder, e.g. `~/Documents/Arduino/libraries/Universal-Trajectory-Interface` — no rename needed, it already ships a proper `library.properties`.
+
+   Restart the IDE afterward if it was already open, so it picks up the new library.
+3. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino` from the [GitHub repo](https://github.com/vishwam-aggarwal/Servo-Calibrator) in the Arduino IDE and upload it to your board, same as any other sketch. Servo signal is fixed at pin `A3` in the sketch (edit `SERVO_PIN` if you need a different one).
+
+Both libraries are free and public — no private access or account needed for either.
+
+## Using the tool
+
+Once the firmware's flashed and the board's wired up per the diagram above, click **Launch Servo Calibrator** below, then **Connect…** and pick your board's serial port. Click **Calibrate** — one button, fully automated — and the trajectory/chart interface unlocks once the sweep finishes.
 
 Full protocol reference, safety notes, and known limitations are in the [project README](https://github.com/vishwam-aggarwal/Servo-Calibrator).
