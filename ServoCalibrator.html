@@ -319,8 +319,11 @@
        and "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <rawPos>"
        stream during calibration -- genuinely new categories this
        protocol didn't have before, since CALIBRATE used to be a single
-       blocking call with one final reply. These are NOT replies to any
-       pending command -- see onProgress/onTable below.
+       blocking call with one final reply. TABLE also streams on its own,
+       outside of any CAL run, in reply to GETTABLE (see
+       fetchTableForExport() below) -- same exact line shape either way.
+       These are NOT replies to any pending command -- see onProgress/
+       onTable below.
      - "<elapsedMs> ERR <code> <rawPos>" is an asynchronous internal
        failure (e.g. a calibration settle timing out) -- also not tied
        to whichever command happens to be pending at that moment.
@@ -540,11 +543,13 @@ function setModelButtons(model) {
 /* ============================================================
    Calibration: CAL acknowledges immediately, then runs asynchronously
    -- completion is detected from the TABLE stream itself (see below),
-   since this firmware has no CALRESULT-style final reply and no
-   GETTABLE to recover a table after the fact (recalibrate every
-   session). calTable's angleCentideg values are raw encoder readings
-   relative to wherever the board booted -- NOT re-anchored so the
-   low-pulse endpoint reads 0 the way the old firmware's table was (see
+   since this firmware has no CALRESULT-style final reply. GETTABLE (see
+   fetchTableForExport() below) can re-query the current session's table
+   later on, but still can't recover one across a reconnect -- opening
+   the port always reboots the board, wiping calTable, so a fresh CAL is
+   still required every session. calTable's angleCentideg values are raw
+   encoder readings relative to wherever the board booted -- NOT
+   re-anchored so the low-pulse endpoint reads 0 the way the old firmware's table was (see
    the .ino's own header comment) -- so this app has to do that framing
    itself: rawToDisplayDeg()/displayDegToRawCentideg() below.
    ============================================================ */
@@ -593,6 +598,32 @@ function applyCalibration(cal) {
   updateBusyUI();
 }
 
+// Reframes a full CAL_TABLE_POINTS-length array of {pulseUs,
+// angleCentideg} firmware readings (raw AS5600 frame -- index 0 isn't
+// necessarily 0deg, and the range isn't guaranteed ascending, see the
+// .ino's own header comment) into this app's established "physical
+// frame" convention: low-pulse endpoint anchored at 0deg, span always
+// positive. Shared by both ways this app ever gets a full table --
+// finishCalibration() (captured live off a just-finished CAL's own TABLE
+// stream) and fetchTableForExport() (an on-demand CMD_GETTABLE query) --
+// so the two produce identically-shaped calibration objects regardless
+// of which one actually asked the firmware for the data.
+function buildCalibrationFromEntries(entries) {
+  const offsetCentideg = entries[0].angleCentideg;
+  const spanCentideg = entries[CAL_TABLE_POINTS - 1].angleCentideg - offsetCentideg;
+  const sign = spanCentideg < 0 ? -1 : 1;
+  const points = entries.map(e => ({
+    pulseUs: e.pulseUs,
+    angleCentideg: sign * (e.angleCentideg - offsetCentideg),
+  }));
+  return {
+    maxAngleDeg: points[CAL_TABLE_POINTS - 1].angleCentideg / 100,
+    minPulseUs: points[0].pulseUs,
+    maxPulseUs: points[CAL_TABLE_POINTS - 1].pulseUs,
+    offsetCentideg, sign, points,
+  };
+}
+
 function finishCalibration() {
   calRunning = false;
   if (rawTableEntries.some(e => e === null)) {
@@ -601,39 +632,65 @@ function finishCalibration() {
     updateBusyUI();
     return;
   }
-  const offsetCentideg = rawTableEntries[0].angleCentideg;
-  const spanCentideg = rawTableEntries[CAL_TABLE_POINTS - 1].angleCentideg - offsetCentideg;
-  const sign = spanCentideg < 0 ? -1 : 1;
-  const points = rawTableEntries.map(e => ({
-    pulseUs: e.pulseUs,
-    angleCentideg: sign * (e.angleCentideg - offsetCentideg),
-  }));
-  applyCalibration({
-    maxAngleDeg: points[CAL_TABLE_POINTS - 1].angleCentideg / 100,
-    minPulseUs: points[0].pulseUs,
-    maxPulseUs: points[CAL_TABLE_POINTS - 1].pulseUs,
-    offsetCentideg, sign, points,
-  });
+  applyCalibration(buildCalibrationFromEntries(rawTableEntries));
   appendLog("# calibration complete");
 }
 
+// Set while a CMD_GETTABLE round trip (see fetchTableForExport()) is
+// collecting its own TABLE stream -- lets onTable below tell a GETTABLE
+// fetch's lines apart from a live CAL's, since both use the identical
+// wire shape.
+let fetchingTable = false;
+let fetchedTableEntries = null;
+
 link.onTable = (line) => {
-  if (!calRunning) return;
+  if (!calRunning && !fetchingTable) return;
   // "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <rawPos>"
   const p = line.trim().split(/\s+/);
   const idx = parseInt(p[2], 10);
   const pulseUs = parseInt(p[3], 10);
   const angleCentideg = parseInt(p[4], 10);
   if (!isFinite(idx) || !isFinite(pulseUs) || !isFinite(angleCentideg) || idx < 0 || idx >= CAL_TABLE_POINTS) return;
-  rawTableEntries[idx] = { pulseUs, angleCentideg };
-  // The table is built down-pass then up-pass (see the .ino) -- every
-  // index is visited twice, but the LAST (up-pass) visit to the final
-  // index is unambiguous: idx===19 immediately after idx===18, i.e. the
-  // up-pass just finished ascending through the whole table.
-  const justFinished = (idx === CAL_TABLE_POINTS - 1 && prevTableIdx === CAL_TABLE_POINTS - 2);
-  prevTableIdx = idx;
-  if (justFinished) finishCalibration();
+
+  if (calRunning) {
+    rawTableEntries[idx] = { pulseUs, angleCentideg };
+    // The table is built down-pass then up-pass (see the .ino) -- every
+    // index is visited twice, but the LAST (up-pass) visit to the final
+    // index is unambiguous: idx===19 immediately after idx===18, i.e. the
+    // up-pass just finished ascending through the whole table.
+    const justFinished = (idx === CAL_TABLE_POINTS - 1 && prevTableIdx === CAL_TABLE_POINTS - 2);
+    prevTableIdx = idx;
+    if (justFinished) finishCalibration();
+  } else {
+    // fetchingTable -- GETTABLE replays the table exactly once,
+    // ascending, so there's no down/up-pass ambiguity to resolve here;
+    // fetchTableForExport() itself detects completion off the command's
+    // own terminal "OK GETTABLE" reply, not off this stream.
+    fetchedTableEntries[idx] = { pulseUs, angleCentideg };
+  }
 };
+
+// Queries the firmware's own current calTable via CMD_GETTABLE, rather
+// than reusing whatever finishCalibration() captured live off the last
+// CAL run's TABLE stream -- a genuine, on-demand round trip straight to
+// the source of truth, decoupled from whether that earlier live capture
+// happened to go perfectly. Returns the same shape buildCalibrationFromEntries()
+// always produces. Throws on rejection or an incomplete stream.
+async function fetchTableForExport() {
+  fetchedTableEntries = new Array(CAL_TABLE_POINTS).fill(null);
+  fetchingTable = true;
+  let resp;
+  try {
+    resp = await sendGuarded("GETTABLE");
+  } finally {
+    fetchingTable = false;
+  }
+  if (!resp.startsWith("OK")) throw new Error("GETTABLE rejected: " + resp);
+  if (fetchedTableEntries.some(e => e === null)) {
+    throw new Error("GETTABLE stream ended without all " + CAL_TABLE_POINTS + " table points.");
+  }
+  return buildCalibrationFromEntries(fetchedTableEntries);
+}
 
 link.onAsyncError = (line) => {
   appendLog("# " + line);
@@ -675,14 +732,18 @@ el("btn-calibrate").onclick = async () => {
   } catch (e) { appendLog("# " + e.message); }
 };
 
-el("btn-export").onclick = () => {
-  if (!calibration) return;
-  const blob = new Blob([JSON.stringify(calibration, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `servo_calibration_${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+el("btn-export").onclick = async () => {
+  try {
+    requireConnected();
+    if (!calibration) throw new Error("Not calibrated yet.");
+    const fetched = await fetchTableForExport();
+    const blob = new Blob([JSON.stringify(fetched, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `servo_calibration_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { appendLog("# " + e.message); }
 };
 
 /* ============================================================
@@ -728,9 +789,10 @@ el("btn-connect").onclick = async () => {
     }
 
     // Basic liveness check -- best-effort, doesn't block the rest of
-    // the connect flow. There's no GETTABLE-equivalent to recover an
-    // existing calibration the way the old firmware allowed; every
-    // session starts uncalibrated.
+    // the connect flow. GETTABLE can't recover an existing calibration
+    // here either, even though the command exists (see
+    // fetchTableForExport()) -- opening the port just rebooted the board,
+    // wiping calTable, so this session starts uncalibrated regardless.
     try {
       const resp = await sendGuarded("PING", 2000);
       if (!resp.startsWith("OK")) appendLog("# unexpected PING reply: " + resp);

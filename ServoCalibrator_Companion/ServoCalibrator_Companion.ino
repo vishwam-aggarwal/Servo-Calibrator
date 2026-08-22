@@ -34,13 +34,16 @@
   Real protocol differences from the old companion firmware that
   ServoCalibrator.html has to account for (see that file's own comments
   for how): CAL acknowledges immediately and streams progress
-  asynchronously rather than blocking on one final reply; there is no
-  GETTABLE/IMPORT/EXPORT equivalent at all (recalibrate fresh after every
-  reconnect); GO takes its target/limits from separate ACCEL/VEL/POS
-  commands rather than one combined call; and calTable's angleCentideg
-  values are raw encoder readings relative to wherever the board happened
-  to boot, NOT re-anchored so index 0 reads exactly 0 the way the old
-  firmware's table was.
+  asynchronously rather than blocking on one final reply; GETTABLE
+  re-streams the current session's already-built calTable on request but
+  there's still no way to recover one across a reconnect (opening the
+  port always reboots the board via DTR, wiping calTable, so a fresh CAL
+  is still required every session) and no IMPORT at all; GO takes its
+  target/limits from separate ACCEL/VEL/POS commands rather than one
+  combined call; and calTable's angleCentideg values are raw encoder
+  readings relative to wherever the board happened to boot, NOT
+  re-anchored so index 0 reads exactly 0 the way the old firmware's table
+  was.
 */
 
 #define LOOP_FREQUENCY_HZ 50    // fixed tick rate -- every timing constant below derives from this
@@ -185,6 +188,13 @@ enum CalibrationState {
   STATE_TRAJ_STREAM,
   STATE_TRAJ_WAIT,
   STATE_TRAJ_DONE,
+  // On-demand table query -- yet another separate routine (hence no
+  // CAL_/TRAJ_ prefix), gated on isCalibrated, entered via CMD_GETTABLE.
+  // Just replays the current session's already-built calTable back over
+  // the wire, one entry per tick -- no servo motion, no settling, so
+  // it's not in isWaitingState()'s list and can't time out. See its own
+  // case body in loop().
+  STATE_GETTABLE_SEND,
 };
 
 // Which pass a STATE_CAL_DOWN_*/STATE_CAL_UP_* run is currently doing --
@@ -228,6 +238,7 @@ enum SerialCommand {
   CMD_MODEL,
   CMD_GO,
   CMD_STOPAFTER,
+  CMD_GETTABLE,
 };
 
 // Every error the firmware can raise, in one place -- throwError() below
@@ -315,6 +326,8 @@ bool calibrationRunning = false;   // true from CMD_CAL until either the table f
                                     // (abort or timeout) -- handleLine() rejects every command except
                                     // ABORT while this is true
 bool trajectoryRunning = false;    // same idea as calibrationRunning, for CMD_GO instead of CMD_CAL
+bool tableSendRunning = false;     // same idea again, for CMD_GETTABLE instead of CMD_CAL/CMD_GO --
+                                    // see STATE_GETTABLE_SEND
 
 // Declared up here (ahead of where they conceptually belong, alongside
 // resetScanState()/judgeScanStep() further down) purely so changeState()
@@ -351,16 +364,22 @@ void changeState(CalibrationState newState) {
   elapsedStateTimeMs = 0;
   justEnteredState = true;
   if (newState == STATE_IDLE) {
-    // Landing on STATE_IDLE always means neither a calibration nor a
-    // trajectory run is still in progress, regardless of which path got
-    // us here (abort, timeout) -- each success path clears its own flag
-    // explicitly instead, since those end on STATE_CAL_DONE/STATE_TRAJ_
-    // DONE, not here. scanResetPending/skipNextStepCheck cleared here too
-    // for the same reason: either one left true by an aborted/timed-out
-    // run could silently exempt a genuinely real step from judgment on
-    // the *next* CAL run otherwise.
+    // Landing on STATE_IDLE always means neither a calibration, a
+    // trajectory move, nor a table send is still in progress, regardless
+    // of which path got us here (abort, timeout, or -- for
+    // tableSendRunning specifically -- STATE_GETTABLE_SEND's own normal
+    // finish, which lands directly on STATE_IDLE rather than a separate
+    // DONE state the way CAL/TRAJ do). calibrationRunning/
+    // trajectoryRunning's OWN success paths clear themselves explicitly
+    // too, since those end on STATE_CAL_DONE/STATE_TRAJ_DONE, not here --
+    // this block is what catches the abort/timeout paths for them.
+    // scanResetPending/skipNextStepCheck cleared here too for the same
+    // reason: either one left true by an aborted/timed-out run could
+    // silently exempt a genuinely real step from judgment on the *next*
+    // CAL run otherwise.
     calibrationRunning = false;
     trajectoryRunning = false;
+    tableSendRunning = false;
     scanResetPending = false;
     skipNextStepCheck = false;
   }
@@ -502,6 +521,7 @@ const char* stateName(CalibrationState s) {
     case STATE_TRAJ_STREAM:     return "TRAJ_STREAM";
     case STATE_TRAJ_WAIT:       return "TRAJ_WAIT";
     case STATE_TRAJ_DONE:       return "TRAJ_DONE";
+    case STATE_GETTABLE_SEND:   return "GETTABLE_SEND";
     default:                    return "UNKNOWN";
   }
 }
@@ -843,6 +863,11 @@ int maxUs = 0;   // set once the fine-up pass reports its edge
 
 CalPoint calTable[CAL_TABLE_POINTS];
 int tableIndex = 0;   // which calTable entry STATE_CAL_TABLE_WRITE/STATE_CAL_TABLE_WAIT is on
+int getTableIndex = 0;   // which calTable entry STATE_GETTABLE_SEND is on -- deliberately its own
+                          // variable, not a reuse of tableIndex: the two never run concurrently
+                          // (CMD_GETTABLE is rejected via the busy-gate while calibrationRunning),
+                          // but sharing one counter across two logically distinct purposes is the
+                          // kind of thing that quietly breaks the next time that assumption changes
 
 // The table is built from two passes, not one -- a down sweep
 // (maxUs->minUs, where the fine-up pass already left the servo, so it
@@ -897,6 +922,21 @@ int32_t rawAngleCentideg() {
   return (int32_t)(totalCounts * 36000L / 4096L);
 }
 
+// Streams one calTable entry over the wire, as "TABLE <idx> <pulseUs>
+// <angleCentideg>" -- shared by recordTableEntry() below (a genuinely new
+// reading, just measured) and STATE_GETTABLE_SEND (an existing entry from
+// an already-built table, just being replayed back out on request), so
+// both stay in the exact same wire shape automatically rather than two
+// independent snprintf() calls silently drifting apart.
+void printTableEntry(int idx) {
+  char buf[40];
+  // %ld for angleCentideg -- it's int32_t/long now, not int; a bare %d
+  // there would read the wrong bytes off the varargs stack on AVR (16-bit
+  // int).
+  snprintf(buf, sizeof(buf), "TABLE %d %d %ld", idx, calTable[idx].pulseUs, calTable[idx].angleCentideg);
+  printMessage(buf);
+}
+
 // Called from STATE_CAL_TABLE_WAIT once a table point settles. No
 // truncating cast to int16_t here -- angleCentideg is int32_t precisely so
 // this doesn't need one. Index progression is the caller's job now
@@ -914,14 +954,7 @@ void recordTableEntry() {
     // readings into the final value.
     calTable[tableIndex].angleCentideg = (calTable[tableIndex].angleCentideg + angleCentideg) / 2;
   }
-
-  char buf[40];
-  // %ld for angleCentideg -- it's int32_t/long now, not int; a bare %d
-  // there would read the wrong bytes off the varargs stack on AVR (16-bit
-  // int).
-  snprintf(buf, sizeof(buf), "TABLE %d %d %ld", tableIndex,
-           calTable[tableIndex].pulseUs, calTable[tableIndex].angleCentideg);
-  printMessage(buf);
+  printTableEntry(tableIndex);
 }
 
 // The 2-point "linear" model, in the same CalPoint shape as calTable --
@@ -1042,6 +1075,7 @@ SerialCommand parseCommand(const char* cmdTok) {
   if (strcmp(cmdTok, "MODEL") == 0) return CMD_MODEL;
   if (strcmp(cmdTok, "GO") == 0) return CMD_GO;
   if (strcmp(cmdTok, "STOPAFTER") == 0) return CMD_STOPAFTER;
+  if (strcmp(cmdTok, "GETTABLE") == 0) return CMD_GETTABLE;
   return CMD_UNKNOWN;
 }
 
@@ -1072,18 +1106,24 @@ int tokenizeLine(char* line) {
 // to one already streaming. MODEL LINEAR/TABLE switches useTable; anything
 // else is rejected. GO plans and starts a trajectory move to
 // targetPositionDeg -- rejected (ERR NOT_CALIBRATED) until isCalibrated.
-// While calibrationRunning or trajectoryRunning, every command except
-// ABORT is rejected outright -- nothing overlaps a run in progress. PING
-// is the other deliberate exception: a pure liveness check, no side
-// effects, so a host app can confirm the connection is alive without
-// having to wait out whatever run is in progress. Anything unrecognized,
-// or with the wrong number of arguments, is rejected too.
+// GETTABLE replays the current session's already-built calTable back
+// over the wire (STATE_GETTABLE_SEND) -- also rejected (ERR NOT_
+// CALIBRATED) until isCalibrated; unlike CAL/GO it does NOT ack
+// immediately, since the whole send finishes well under a second (see
+// STATE_GETTABLE_SEND's own comment) -- its one reply comes only once
+// every point has actually gone out. While calibrationRunning,
+// trajectoryRunning, or tableSendRunning, every command except ABORT is
+// rejected outright -- nothing overlaps a run in progress. PING is the
+// other deliberate exception: a pure liveness check, no side effects, so
+// a host app can confirm the connection is alive without having to wait
+// out whatever run is in progress. Anything unrecognized, or with the
+// wrong number of arguments, is rejected too.
 void handleLine(char* line) {
   int n = tokenizeLine(line);
   if (n == 0) return;
 
   SerialCommand cmd = parseCommand(tok[0]);
-  if ((calibrationRunning || trajectoryRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
+  if ((calibrationRunning || trajectoryRunning || tableSendRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
     Serial.println(F("ERR BUSY"));
     return;
   }
@@ -1160,6 +1200,18 @@ void handleLine(char* line) {
       } else {
         Serial.println(F("ERR USAGE"));
       }
+      break;
+    case CMD_GETTABLE:
+      if (!isCalibrated) {
+        Serial.println(F("ERR NOT_CALIBRATED"));
+        break;
+      }
+      tableSendRunning = true;
+      getTableIndex = 0;
+      changeState(STATE_GETTABLE_SEND);
+      // No immediate "OK" here -- see this function's own header comment
+      // and STATE_GETTABLE_SEND for why GETTABLE's reply is deferred
+      // instead of acknowledging up front like CAL/GO do.
       break;
     default:
       Serial.println(F("ERR UNKNOWN_CMD"));
@@ -1614,6 +1666,33 @@ void loop() {
       break;
 
     case STATE_TRAJ_DONE:
+      break;
+
+    case STATE_GETTABLE_SEND:
+      // One entry per tick, oldest-first -- same one-thing-per-tick FSM
+      // shape this file uses everywhere else (STATE_CAL_TABLE_WRITE/WAIT
+      // et al.), rather than blasting all CAL_TABLE_POINTS lines out of
+      // one loop() call. No motion or settling involved: calTable is
+      // already sitting in RAM from the last CAL run, this just replays
+      // it back out on request via the same printTableEntry() formatter
+      // recordTableEntry() itself uses. The one "OK GETTABLE" reply --
+      // unlike CAL/GO's immediate ack -- lands only once every point has
+      // actually gone out: at CAL_TABLE_POINTS ticks (well under a
+      // second at this 50Hz rate), a plain synchronous request/response
+      // round trip fits comfortably inside a normal command timeout,
+      // unlike CAL (up to ~a minute) or GO (however long the move
+      // takes), which both need to ack up front so the caller isn't
+      // blocked that long. (An ABORT landing mid-send would force
+      // STATE_IDLE without this reply ever going out -- a real but
+      // low-stakes edge case: nothing physical is in flight to abort
+      // here, the caller just sees its GETTABLE time out instead of
+      // erroring cleanly.)
+      printTableEntry(getTableIndex);
+      getTableIndex++;
+      if (getTableIndex >= CAL_TABLE_POINTS) {
+        changeState(STATE_IDLE);   // tableSendRunning cleared there
+        Serial.println(F("OK GETTABLE"));
+      }
       break;
   }
 }

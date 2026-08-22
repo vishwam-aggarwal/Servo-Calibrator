@@ -1243,6 +1243,106 @@ bug this rewrite set out to fix. The up side in the same run reached
 into the 2055–2100µs band, and table-building kicked off immediately
 after with no errors or recovery needed on that side at all.
 
+## `GETTABLE`: an on-demand table query, and Export actually querying it (2026-08-21)
+
+Per explicit direction, added back a `GETTABLE` command — the FSM
+firmware previously had no way to return `calTable` on request at all
+(see the "FSM firmware becomes THE companion" entry above: Export was
+built entirely from whatever the app happened to capture live off a
+`CAL` run's own streamed `TABLE` lines, with no way to re-ask the
+firmware for the data afterward). Implemented, per direct instruction,
+as its own FSM state that loops through the table one entry per tick
+until all are sent — `STATE_GETTABLE_SEND`, mirroring the same
+one-thing-per-tick shape every other state in this file already uses,
+rather than dumping all 20 lines out of a single `loop()` call.
+
+- `CMD_GETTABLE` rejects `ERR NOT_CALIBRATED` the same as `GO`/`MODEL`
+  if `isCalibrated` is false. Otherwise it does **not** ack immediately
+  the way `CAL`/`GO` do — those need an instant reply because the real
+  work behind them can take up to a minute (`CAL`) or however long a
+  move takes (`GO`), so the caller can't be left blocking on one
+  `sendCommand()` promise that whole time. `GETTABLE` has no such
+  problem: all 20 points go out in `CAL_TABLE_POINTS` ticks, well under
+  a second at 50Hz, comfortably inside a normal request/response
+  timeout — so its one `OK GETTABLE` reply is deliberately held until
+  every point has actually been sent, a genuine synchronous round trip
+  rather than another acknowledge-then-stream command.
+- `tableSendRunning` (a `calibrationRunning`/`trajectoryRunning`-shaped
+  busy flag) added to the busy-gate check and to `changeState()`'s
+  `STATE_IDLE`-clearing block — `STATE_GETTABLE_SEND`'s own normal
+  finish lands directly on `STATE_IDLE` (there's nothing left to hold in
+  a separate `DONE` state the way `CAL`/`GO` do), so that block is what
+  actually clears the flag on the normal path here, not just the
+  abort/timeout paths it originally existed for.
+- `printTableEntry(idx)` factored out of `recordTableEntry()` — the
+  exact same `TABLE <idx> <pulseUs> <angleCentideg>` line shape now
+  backs both a genuinely new reading (`recordTableEntry()`, during `CAL`)
+  and an existing entry just being replayed back out
+  (`STATE_GETTABLE_SEND`), so there's one formatter instead of two that
+  could quietly drift apart.
+- `getTableIndex` is its own variable, not a reuse of `tableIndex` — the
+  two states can never run concurrently (the busy-gate rejects
+  `GETTABLE` while `calibrationRunning`), but sharing one counter across
+  two logically distinct purposes is exactly the kind of thing that
+  quietly breaks the next time that non-overlap assumption changes.
+
+**`ServoCalibrator.html`'s Export now actually queries the firmware**
+instead of only ever reusing whatever `finishCalibration()` captured
+live during the original `CAL` run: `fetchTableForExport()` sends
+`GETTABLE`, collects its `TABLE` stream (the existing `onTable` handler
+now tells a `GETTABLE` fetch's lines apart from a live `CAL`'s via a new
+`fetchingTable` flag, same line shape either way), and reframes it
+through a newly-shared `buildCalibrationFromEntries()` helper —
+extracted out of `finishCalibration()` itself, so a live-CAL-sourced
+calibration and a GETTABLE-sourced export both go through the identical
+offset/sign/points reframing instead of two copies of that logic.
+`GETTABLE` still can't survive an actual reconnect (opening the port
+always reboots the board, wiping `calTable` — same limitation as
+before), so this is specifically about decoupling Export from the live
+capture within one already-calibrated session, not about persisting
+calibration across sessions.
+
+Compiles clean: 19042 bytes flash / 1366 bytes RAM (up slightly from
+18812/1345 before this command existed, as expected for one new state
+plus one new command).
+
+**Verified end to end, firmware and browser app both.** On real
+hardware: `GETTABLE` before `CAL` correctly rejects `ERR NOT_CALIBRATED`;
+after a real `CAL` run, `GETTABLE` streams all 20 `TABLE` entries
+ascending (0→19, one per tick — successive lines land exactly 20ms
+apart in the log, matching the 50Hz tick rate), pulses 330→2075µs,
+angles -14611→9056 centideg (~236.7° stroke), then `OK GETTABLE`. On the
+actual running `ServoCalibrator.html` (`claude-in-chrome`, not a
+reimplementation): fed the real captured `TABLE` lines above into
+`link._onLine()` with `fetchingTable` true and confirmed
+`fetchedTableEntries` fills correctly and `buildCalibrationFromEntries()`
+reframes them to match a hand calculation exactly (offset `-14611`,
+sign `+1`, `points[0].angleCentideg === 0`, `maxAngleDeg === 236.67`);
+confirmed the same `onTable` gate correctly ignores a `TABLE` line when
+neither `calRunning` nor `fetchingTable` is true; confirmed a literal
+`"OK GETTABLE"` line lands in `link.lineQueue` (a genuine reply) rather
+than being misclassified as an async line.
+
+Hit two unrelated `arduino-cli` upload failures getting to that
+hardware pass, worth recording since they cost real time and weren't
+firmware bugs: first, two long hangs (stuck silently right after
+"Setting baud rate: 57600," several minutes each, no CPU activity) that
+turned out to be a Chrome tab still holding the Web Serial connection
+open — even after the user replugged the board's USB cable, a `.NET`
+`SerialPort.Open()` test straight from PowerShell still failed
+"Access is denied" until that tab was actually closed, not just the
+board power-cycled. Second, once the port was genuinely free, uploading
+with this project's usual `--fqbn arduino:avr:nano:cpu=atmega328old`
+failed cleanly (`not in sync: resp=0x00`, all 10 retries) — the
+board's actual bootloader didn't match that FQBN's assumed old-bootloader/
+57600-baud protocol at this point (confirmed independently: the user
+successfully uploaded Blink through the Arduino IDE while `arduino-cli`
+was still failing, proving the board/cable/port were never the problem).
+Dropping `cpu=atmega328old` — plain `--fqbn arduino:avr:nano`, the
+new-bootloader default — uploaded cleanly on the first try. Worth
+remembering if a future session hits the same `not in sync` failure on
+this board: try the plain FQBN before assuming a hardware fault.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
