@@ -1762,7 +1762,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="196.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 1 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 1 &mdash; all six models.</p>
 </div>
 <div class="subplot">
 <svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 2, all six models">
@@ -1843,7 +1843,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="144.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 2 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 2 &mdash; all six models.</p>
 </div>
 <div class="subplot">
 <svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 3, all six models">
@@ -1924,7 +1924,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="175.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 3 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 3 &mdash; all six models.</p>
 </div>
 </div>
 </div>
@@ -2012,7 +2012,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="198.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 1 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 1 &mdash; all six models.</p>
 </div>
 <div class="subplot">
 <svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 2, all six models">
@@ -2093,7 +2093,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="196.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 2 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 2 &mdash; all six models.</p>
 </div>
 <div class="subplot">
 <svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 3, all six models">
@@ -2174,7 +2174,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="205.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 3 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 3 &mdash; all six models.</p>
 </div>
 </div>
 </div>
@@ -2262,7 +2262,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="177.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 1 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 1 &mdash; all six models.</p>
 </div>
 <div class="subplot">
 <svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 2, all six models">
@@ -2343,7 +2343,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="205.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 2 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 2 &mdash; all six models.</p>
 </div>
 <div class="subplot">
 <svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 3, all six models">
@@ -2424,7 +2424,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <circle cx="294.0" cy="200.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
-<p class="subplot-caption">Unit 3 &mdash; linear2 (amber) vs. table20 (blue).</p>
+<p class="subplot-caption">Unit 3 &mdash; all six models.</p>
 </div>
 </div>
 </div>
