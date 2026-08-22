@@ -176,8 +176,8 @@ A pan/tilt camera mount can absorb a degree of error and nobody notices the hori
 <text x="586" y="123" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)" text-anchor="start">table20</text>
 </svg>
 <div class="chart-legend">
-<span><span class="swatch" style="background: var(--series-1);"></span>Calibrated (table20) &mdash; 2.7mm drift radius</span>
-<span><span class="swatch" style="background: var(--series-2);"></span>Naive linear model &mdash; 8.4mm drift radius</span>
+<span><span class="swatch" style="background: var(--series-1);"></span>Calibrated (table20)</span>
+<span><span class="swatch" style="background: var(--series-2);"></span>Naive linear model</span>
 </div>
 <p class="chart-caption">Three joints &times; 120mm links, this study's average angular error &mdash; order-of-magnitude estimate, not a full kinematic stack-up. Both circles show a <strong>radius</strong>, not a diameter: the distance from the commanded point to where the end effector actually lands, not the width across the uncertainty region.</p>
 </div>
