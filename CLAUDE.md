@@ -905,16 +905,26 @@ This repo's `article.md` is the canonical source for this project's
 long-form write-up on [vishwamaggarwal.com](https://vishwamaggarwal.com)
 — written here, not in the website repo, per the user's explicit
 preference to work at the project level and have the website pull
-from it rather than authoring content twice. `draft: true` in its
-frontmatter until it gets a final read-through. The website's own
-fetch-at-build-time pipeline (pulling this file via the GitHub API,
-triggered by a Vercel Deploy Hook) is still unbuilt as of this
-writing — see the website repo's own `CLAUDE.md` once that lands.
+from it rather than authoring content twice.
 Frontmatter/inline-SVG-chart conventions (`--series-1`/`--series-2`
 CSS tokens, no custom classes, no blank line inside an HTML block)
 match the website's existing `src/content/articles/*.md` exactly, so
-the file can be dropped in with no reformatting once the pipeline
-exists.
+the file drops in with no reformatting.
+
+**Now built and published**, same day: the website's fetch-at-build-time
+pipeline (Astro Content Layer API, GitHub Contents API, `articleSources`/
+`articleData` collections — see the website repo's own `CLAUDE.md` for
+the mechanics) pulls this file plus `test-jig.jpg` at build time; `draft`
+flipped to `false` and the article is live. A companion `data.md`, same
+root-level pattern, holds the full per-unit dataset (every MATLAB-toolkit
+plot, all nine units, grouped into subplot grids matching the toolkit's
+own figure layout) and is linked from the bottom of `article.md` for
+readers who want the unabridged version; it publishes through the same
+pipeline via a second `articleData` entry. The two pages deliberately
+disagree on chart width — `article.md`'s charts match the text column,
+`data.md`'s stay in the wide breakout so its 3-per-row subplot grids
+don't wrap — via a `.data-page` class scoping the breakout CSS to the
+data route only, not a per-file setting in either markdown file.
 
 ## Requirements & dependencies
 
