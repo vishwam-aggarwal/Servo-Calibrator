@@ -43,7 +43,7 @@ Nine servos, three families — a Miuzei 25kg Servo, a knockoff MG996R, and an M
 <text x="534.4" y="240">table40</text>
 <text x="656" y="240">table50</text>
 </g>
-<line x1="48" y1="42.7" x2="656" y2="42.7" stroke="var(--series-2)" stroke-width="1.5" stroke-dasharray="6 4"/>
+<line x1="48" y1="42.7" x2="169.6" y2="162.3" stroke="var(--series-2)" stroke-width="2" stroke-dasharray="6 4"/>
 <path d="M 169.6 162.3 L 291.2 162.9 L 412.8 164.1 L 534.4 164.5 L 656 165.1" fill="none" stroke="var(--series-1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 <circle cx="48" cy="42.7" r="5" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="2.5"/>
 <text x="48" y="30.7" font-size="11" fill="var(--text)" font-weight="600" text-anchor="middle">1.33&#176;</text>
@@ -151,8 +151,8 @@ It's not a coincidence that the MG90D leads both charts in this section as well 
 A pan/tilt camera mount can absorb a degree of error and nobody notices the horizon tilt. A robotic arm can't — every joint's error doesn't just sit there, it rides on top of every joint downstream of it, compounding into wherever the end effector actually lands.
 
 <div class="chart-figure">
-<p class="chart-title">End-effector drift: naive linear model vs. calibrated table, three-joint arm</p>
-<svg viewBox="0 0 620 300" role="img" aria-label="Diagram of a three-joint arm with two overlapping circles at the end effector showing positional drift, roughly 8.4 millimeters for the naive linear model versus 2.7 millimeters for a calibrated table">
+<p class="chart-title">End-effector drift radius: naive linear model vs. calibrated table, three-joint arm</p>
+<svg viewBox="0 0 780 300" role="img" aria-label="Diagram of a three-joint arm with two circles at the end effector showing positional drift radius, roughly 8.4 millimeter radius for the naive linear model versus 2.7 millimeter radius for a calibrated table">
 <rect x="30" y="240" width="60" height="14" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5"/>
 <circle cx="60" cy="232" r="11" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
 <line x1="60" y1="232" x2="210" y2="170" stroke="var(--text-faint)" stroke-width="2"/>
@@ -161,21 +161,25 @@ A pan/tilt camera mount can absorb a degree of error and nobody notices the hori
 <line x1="210" y1="170" x2="340" y2="120" stroke="var(--text-faint)" stroke-width="2"/>
 <text x="270" y="137" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">120mm</text>
 <circle cx="340" cy="120" r="8" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
-<line x1="340" y1="120" x2="440" y2="82" stroke="var(--text-faint)" stroke-width="2"/>
-<text x="385" y="98" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">120mm</text>
-<circle cx="440" cy="82" r="46" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-dasharray="5 4"/>
-<circle cx="440" cy="82" r="17" fill="none" stroke="var(--series-1)" stroke-width="2.5"/>
-<circle cx="440" cy="82" r="3" fill="var(--text)"/>
-<line x1="486" y1="82" x2="540" y2="52" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
-<text x="546" y="48" font-family="var(--font-mono)" font-size="11" fill="var(--series-2)" text-anchor="start">&#8776;8.4mm &mdash; linear2</text>
-<line x1="457" y1="82" x2="540" y2="102" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
-<text x="546" y="106" font-family="var(--font-mono)" font-size="11" fill="var(--series-1)" text-anchor="start">&#8776;2.7mm &mdash; table20</text>
+<line x1="340" y1="120" x2="470" y2="88" stroke="var(--text-faint)" stroke-width="2"/>
+<text x="405" y="97" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">120mm</text>
+<circle cx="470" cy="88" r="46" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-dasharray="5 4"/>
+<circle cx="470" cy="88" r="17" fill="none" stroke="var(--series-1)" stroke-width="2.5"/>
+<circle cx="470" cy="88" r="3" fill="var(--text)"/>
+<line x1="470" y1="88" x2="511.7" y2="68.6" stroke="var(--series-2)" stroke-width="1.5"/>
+<line x1="511.7" y1="68.6" x2="580" y2="40" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="586" y="38" font-family="var(--font-mono)" font-size="11" fill="var(--series-2)" text-anchor="start">radius &#8776; 8.4mm</text>
+<text x="586" y="53" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)" text-anchor="start">linear2</text>
+<line x1="470" y1="88" x2="486.4" y2="83.6" stroke="var(--series-1)" stroke-width="1.5"/>
+<line x1="486.4" y1="83.6" x2="580" y2="110" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="586" y="108" font-family="var(--font-mono)" font-size="11" fill="var(--series-1)" text-anchor="start">radius &#8776; 2.7mm</text>
+<text x="586" y="123" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)" text-anchor="start">table20</text>
 </svg>
 <div class="chart-legend">
-<span><span class="swatch" style="background: var(--series-1);"></span>Calibrated (table20)</span>
-<span><span class="swatch" style="background: var(--series-2);"></span>Naive linear model</span>
+<span><span class="swatch" style="background: var(--series-1);"></span>Calibrated (table20) &mdash; 2.7mm drift radius</span>
+<span><span class="swatch" style="background: var(--series-2);"></span>Naive linear model &mdash; 8.4mm drift radius</span>
 </div>
-<p class="chart-caption">Three joints &times; 120mm links, this study's average angular error &mdash; order-of-magnitude estimate, not a full kinematic stack-up.</p>
+<p class="chart-caption">Three joints &times; 120mm links, this study's average angular error &mdash; order-of-magnitude estimate, not a full kinematic stack-up. Both circles show a <strong>radius</strong>, not a diameter: the distance from the commanded point to where the end effector actually lands, not the width across the uncertainty region.</p>
 </div>
 
 Take a modest three-joint arm — shoulder, elbow, wrist, each riding on a 120mm link, well within reach of servos this size. Run this study's average numbers through it: the naive straight-line formula puts roughly **2.8mm** of drift on the end effector from each joint's error, on its own. Stack three of them and a build commanded to hit an exact point can land more than **8mm** away from where you told it to go — enough to miss a socket, misplace a component, or draw a line that visibly isn't straight.
