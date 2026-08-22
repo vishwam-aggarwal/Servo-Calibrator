@@ -52,9 +52,10 @@
 // -- found on real hardware: every pulse below ~544us was silently
 // rewritten to 544us, so the servo never actually received them. Looked
 // exactly like the servo physically freezing below ~540us (coarse stall,
-// a fully flat 100us fine-margin sweep, RAWSWEEP all reading the same
-// encoder position from 540 down to 250) -- it was never physical at
-// all, and running ServoDAQ_Companion (whose attach() already passes
+// a fully flat 100us fine-margin sweep, and an unconditional diagnostic
+// sweep all reading the same encoder position from 540 down to 250) --
+// it was never physical at all, and running ServoDAQ_Companion (whose
+// attach() already passes
 // these) against the same servo the same session proved it: smooth,
 // unremarkable motion the whole way down to ~260-330us.
 #define ABS_FLOOR_US 80
@@ -180,13 +181,6 @@ enum CalibrationState {
   STATE_TRAJ_STREAM,
   STATE_TRAJ_WAIT,
   STATE_TRAJ_DONE,
-  // A deliberately dumb sweep -- write, wait for settle, write the next
-  // step, repeat, all the way from rawSweepStartUs to rawSweepEndUs, no
-  // stall/anomaly/reversal logic anywhere in it. For getting a raw,
-  // unfiltered ground truth from real hardware when the smart detection's
-  // own result is in doubt -- see CMD_RAWSWEEP.
-  STATE_RAW_SWEEP_WRITE,
-  STATE_RAW_SWEEP_WAIT,
 };
 
 // Which pass a STATE_CAL_DOWN_*/STATE_CAL_UP_* run is currently doing --
@@ -230,7 +224,6 @@ enum SerialCommand {
   CMD_MODEL,
   CMD_GO,
   CMD_STOPAFTER,
-  CMD_RAWSWEEP,
 };
 
 // Every error the firmware can raise, in one place -- throwError() below
@@ -313,7 +306,6 @@ bool calibrationRunning = false;   // true from CMD_CAL until either the table f
                                     // (abort or timeout) -- handleLine() rejects every command except
                                     // ABORT while this is true
 bool trajectoryRunning = false;    // same idea as calibrationRunning, for CMD_GO instead of CMD_CAL
-bool rawSweepRunning = false;      // same idea again, for CMD_RAWSWEEP
 bool justEnteredState = false;             // set by changeState(), consumed once at the top of the
                                             // switch each tick -- lets a case body run one-time entry
                                             // actions without touching currentState/stateEnteredMs itself
@@ -346,7 +338,6 @@ void changeState(CalibrationState newState) {
     // DONE, not here.
     calibrationRunning = false;
     trajectoryRunning = false;
-    rawSweepRunning = false;
   }
 }
 
@@ -360,8 +351,7 @@ void changeState(CalibrationState newState) {
 // checked directly in its own case body instead -- see there.
 bool isWaitingState(CalibrationState s) {
   return s == STATE_CAL_CENTER || s == STATE_CAL_DOWN_WAIT || s == STATE_CAL_UP_CENTER ||
-         s == STATE_CAL_UP_WAIT || s == STATE_CAL_TABLE_WAIT || s == STATE_TRAJ_WAIT ||
-         s == STATE_RAW_SWEEP_WAIT;
+         s == STATE_CAL_UP_WAIT || s == STATE_CAL_TABLE_WAIT || s == STATE_TRAJ_WAIT;
 }
 
 // Which ErrorCode the shared timeout check (in loop()) raises for state s
@@ -486,8 +476,6 @@ const char* stateName(CalibrationState s) {
     case STATE_TRAJ_STREAM:     return "TRAJ_STREAM";
     case STATE_TRAJ_WAIT:       return "TRAJ_WAIT";
     case STATE_TRAJ_DONE:       return "TRAJ_DONE";
-    case STATE_RAW_SWEEP_WRITE: return "RAW_SWEEP_WRITE";
-    case STATE_RAW_SWEEP_WAIT:  return "RAW_SWEEP_WAIT";
     default:                    return "UNKNOWN";
   }
 }
@@ -512,16 +500,13 @@ void printProgress() {
 // Every calibration-routine state -- not STATE_IDLE, not STATE_CAL_DONE
 // (nothing left to report once the table's built), not STATE_TRAJ_* (that
 // side gets one printProgress() call at the end instead, from STATE_TRAJ_
-// WAIT, not a per-tick stream). STATE_RAW_SWEEP_* included too -- same
-// "print every tick of a multi-step hardware test" need, name's just a
-// holdover from before that existed. The list loop() checks against for
-// the per-tick printProgress() call.
+// WAIT, not a per-tick stream). The list loop() checks against for the
+// per-tick printProgress() call.
 bool isCalibrationState(CalibrationState s) {
   return s == STATE_CAL_CENTER || s == STATE_CAL_DOWN_WRITE || s == STATE_CAL_DOWN_WAIT ||
          s == STATE_CAL_RECOVER_WAIT ||
          s == STATE_CAL_UP_CENTER || s == STATE_CAL_UP_WRITE || s == STATE_CAL_UP_WAIT ||
-         s == STATE_CAL_TABLE_WRITE || s == STATE_CAL_TABLE_WAIT ||
-         s == STATE_RAW_SWEEP_WRITE || s == STATE_RAW_SWEEP_WAIT;
+         s == STATE_CAL_TABLE_WRITE || s == STATE_CAL_TABLE_WAIT;
 }
 
 // Trajectory parameters, set from serial (ACCEL/VEL/POS) and read by
@@ -617,9 +602,6 @@ int currentStepUs = CAL_COARSE_STEP_US;   // step size STATE_CAL_DOWN_WRITE/STAT
 ScanPhase currentPhase = PHASE_COARSE;
 
 TestStage stopAfterStage = STAGE_ALL;   // set by CMD_STOPAFTER -- see TestStage's own comment
-
-int rawSweepEndUs = 0;
-int rawSweepStepUs = 0;         // signed -- negative sweeps down, positive sweeps up
 
 // Running-average baseline over the last CAL_STEP_DELTA_WINDOW_SAMPLES
 // step RATES (counts moved per commanded microsecond, not a raw count) --
@@ -1107,11 +1089,10 @@ SerialCommand parseCommand(const char* cmdTok) {
   if (strcmp(cmdTok, "MODEL") == 0) return CMD_MODEL;
   if (strcmp(cmdTok, "GO") == 0) return CMD_GO;
   if (strcmp(cmdTok, "STOPAFTER") == 0) return CMD_STOPAFTER;
-  if (strcmp(cmdTok, "RAWSWEEP") == 0) return CMD_RAWSWEEP;
   return CMD_UNKNOWN;
 }
 
-const int MAX_TOKENS = 4;   // command + up to 3 arguments (CMD_RAWSWEEP's startUs/endUs/stepUs)
+const int MAX_TOKENS = 2;   // command + at most 1 argument (ACCEL/VEL/POS/MODEL/STOPAFTER)
 char* tok[MAX_TOKENS];
 
 // Splits line in place on spaces (strtok mutates it, fine -- line is
@@ -1149,7 +1130,7 @@ void handleLine(char* line) {
   if (n == 0) return;
 
   SerialCommand cmd = parseCommand(tok[0]);
-  if ((calibrationRunning || trajectoryRunning || rawSweepRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
+  if ((calibrationRunning || trajectoryRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
     Serial.println(F("ERR BUSY"));
     return;
   }
@@ -1226,20 +1207,6 @@ void handleLine(char* line) {
       } else {
         Serial.println(F("ERR USAGE"));
       }
-      break;
-    case CMD_RAWSWEEP:
-      // RAWSWEEP <startUs> <endUs> <stepUs> -- no smart logic anywhere in
-      // this: write startUs, wait for settle, then step by stepUs (its own
-      // sign, not inferred) toward endUs, settle, repeat, until endUs is
-      // reached or passed. Pure ground truth for when the smart
-      // detection's own result is in doubt.
-      if (n != 4) { Serial.println(F("ERR USAGE")); break; }
-      rawSweepEndUs = atoi(tok[2]);
-      rawSweepStepUs = atoi(tok[3]);
-      rawSweepRunning = true;
-      writeServoUs(atoi(tok[1]));
-      changeState(STATE_RAW_SWEEP_WAIT);
-      Serial.println(F("OK RAWSWEEP"));
       break;
     default:
       Serial.println(F("ERR UNKNOWN_CMD"));
@@ -1754,32 +1721,6 @@ void loop() {
       break;
 
     case STATE_TRAJ_DONE:
-      break;
-
-    case STATE_RAW_SWEEP_WRITE: {
-      // One-tick state, no detection logic at all -- just: are we past
-      // rawSweepEndUs yet (sign-aware, since rawSweepStepUs can be either
-      // direction)? If so, stop. Otherwise take the next step and wait.
-      int nextUs = lastSentUs + rawSweepStepUs;
-      bool overshot = (rawSweepStepUs < 0) ? (nextUs < rawSweepEndUs) : (nextUs > rawSweepEndUs);
-      if (overshot) {
-        rawSweepRunning = false;
-        changeState(STATE_IDLE);
-      } else {
-        writeServoUs(nextUs);
-        changeState(STATE_RAW_SWEEP_WAIT);
-      }
-      break;
-    }
-
-    case STATE_RAW_SWEEP_WAIT:
-      // Timeout exit route handled generically above, same as every other
-      // waiting state. Settle alone (no stall/anomaly/reversed check --
-      // this sweep doesn't stop early for anything but the timeout or
-      // reaching rawSweepEndUs) is what moves it to the next step.
-      if (isSettled) {
-        changeState(STATE_RAW_SWEEP_WRITE);
-      }
       break;
   }
 }
