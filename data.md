@@ -4,7 +4,7 @@ description: "Every plot behind the ServoDAQ 9-unit study, unit by unit: range-f
 draft: false
 ---
 
-This is the full dataset behind [Your Servo Is Lying To You](/articles/your-servo-is-lying-to-you/) &mdash; every plot the [MATLAB analysis toolkit](https://github.com/vishwam-aggarwal/Servo-Calibrator/tree/master/MATLAB) produced for all nine units, not just the handful that made it into the article itself. Laid out the same way the toolkit itself lays it out: one figure per servo family, one subplot per unit. Same ground truth, same 55,029 trials, just the unabridged version for anyone who wants a specific unit's own curve rather than the pooled numbers.
+This is the full dataset behind [Your Servo Is Lying To You](/articles/hobby-servo-calibration/) &mdash; every plot the [MATLAB analysis toolkit](https://github.com/vishwam-aggarwal/Servo-Calibrator/tree/master/MATLAB) produced for all nine units, not just the handful that made it into the article itself. Laid out the same way the toolkit itself lays it out: one figure per servo family, one subplot per unit. Same ground truth, same 55,029 trials, just the unabridged version for anyone who wants a specific unit's own curve rather than the pooled numbers.
 
 One methodology note that applies throughout: a couple of the raw naive-sweep traces below have a real, reproducible glitch right near their low-pulse edge &mdash; a wrap/backoff artifact, not a fabricated data point &mdash; and are cleaned the same way the MATLAB toolkit itself cleans them (drops a non-monotonic tail once the sweep's direction sustainedly reverses). Nothing is smoothed or adjusted beyond that; every curve here is the servo's own measured response.
 
