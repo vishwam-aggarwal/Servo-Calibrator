@@ -88,9 +88,9 @@
 #define CAL_COARSE_STEP_US 50            // coarse-pass step size (to tune later)
 #define CAL_FINE_STEP_US 5               // fine-pass step size (to tune later)
 #define CAL_FINE_MARGIN_US 100           // how far back (toward center) from the coarse edge the fine pass starts,
-                                          // AND how much ground it covers -- the fine pass always walks this whole
-                                          // margin (see CAL_FINE_SWEEP_STEPS below), not just a safety cushion
-                                          // before an early exit (to tune later)
+                                          // and the most ground it can cover before its own safety cap kicks in
+                                          // (see CAL_FINE_SWEEP_STEPS below) -- the fine pass itself stops as soon
+                                          // as it finds the edge, same as coarse (to tune later)
 
 // The coarse-sweep edge check compares SETTLED POSITIONS, one sample per
 // step, not a per-tick reading -- see updateStepDelta()'s own comment for
@@ -112,15 +112,16 @@
                                           // extreme -- a step moving much farther than normal (to tune further)
 #define CAL_STEP_STALL_COUNTS 2          // max |step delta| itself (absolute, no baseline needed) before we call it a stall (to tune later)
 
-// The fine pass always walks the *entire* CAL_FINE_MARGIN_US margin, this
-// many fixed CAL_FINE_STEP_US steps, rather than stopping at the first
-// stalled reading -- that was the actual design: CAL_FINE_MARGIN_US sets
-// how much ground the fine pass covers, not just a safety cushion before
-// a trigger-happy exit. A stall along the way is noted (see
-// lastNormalFineUs) and swept straight through; only an unambiguous
-// reversed/anomaly ends it early, same as this project's Python-host
-// history did it. Integer division is exact here -- both operands are
-// tuned together (to tune later).
+// Per explicit direction, the fine pass stops the moment it finds the
+// edge -- same stall/anomaly/reversed detection as coarse, at the same
+// sensitivity, just in CAL_FINE_STEP_US steps instead of
+// CAL_COARSE_STEP_US ones (see STATE_CAL_DOWN_WAIT/UP_WAIT's own
+// comments). CAL_FINE_SWEEP_STEPS -- how many fixed fine steps
+// CAL_FINE_MARGIN_US covers -- is only a hard safety cap now: if the
+// margin is fully walked without the edge ever triggering, stop anyway
+// rather than keep going past where the margin was supposed to end.
+// Integer division is exact here -- both operands are tuned together
+// (to tune later).
 #define CAL_FINE_SWEEP_STEPS (CAL_FINE_MARGIN_US / CAL_FINE_STEP_US)
 
 #define CAL_TABLE_POINTS 20   // number of evenly-spaced points, minUs..maxUs inclusive, recorded into calTable
@@ -1387,39 +1388,34 @@ void loop() {
 
     case STATE_CAL_DOWN_WAIT:
       if (currentPhase == PHASE_FINE) {
-        // The fine pass always walks the *entire* CAL_FINE_MARGIN_US
-        // margin (CAL_FINE_SWEEP_STEPS fixed steps) rather than stopping
-        // at the first stalled reading -- see CAL_FINE_SWEEP_STEPS's own
-        // comment. A stall along the way is just noted (lastNormalFineUs
-        // isn't advanced) and swept straight through; only an unambiguous
-        // reversed move, oversized-jump anomaly, or recovered-from-spin
-        // event (spinRecovered -- see loop()'s own comment) ends it
-        // early -- none of those need repeating to mean something the
-        // way one flat reading does.
-        bool sweepDone = spinRecovered;
+        // Mirrors the coarse branch below: any of spinRecovered/
+        // stepDeltaStall/stepDeltaAnomaly/stepDeltaReversed means the
+        // edge was just found -- same detection functions/thresholds as
+        // coarse (updateStepDelta() doesn't distinguish phase), so fine
+        // is exactly as sensitive as coarse, never more forgiving just
+        // because its own steps are smaller. CAL_FINE_SWEEP_STEPS is a
+        // hard safety cap (walk the whole margin without ever finding a
+        // definitive edge -> stop anyway, using whatever's the last
+        // known-good position) -- not the normal way this ends; finding
+        // the edge is.
+        bool edgeFound = spinRecovered || stepDeltaStall || stepDeltaAnomaly || stepDeltaReversed;
         spinRecovered = false;
-        if (!sweepDone && (stepDeltaAnomaly || stepDeltaReversed)) {
-          sweepDone = true;
-        } else if (!sweepDone && isSettled) {
+        if (!edgeFound && isSettled) {
           // fineStepsTaken == 0 means this settle is the margin move
           // itself, not a real fine step -- skipNextStepCheck already
-          // exempted it from judgment (stepDeltaStall reads false for it,
-          // same as a genuinely normal step, so it can't be told apart
-          // from one here), so it must not touch lastNormalFineUs or
-          // count toward CAL_FINE_SWEEP_STEPS either.
+          // exempted it from judgment (every flag above reads false for
+          // it), so it must not touch lastNormalFineUs or the safety cap.
           if (fineStepsTaken > 0) {
-            if (!stepDeltaStall) {
-              lastNormalFineUs = lastSentUs;   // this step actually moved
-            }
-            sweepDone = (fineStepsTaken >= CAL_FINE_SWEEP_STEPS);
+            lastNormalFineUs = lastSentUs;   // this step moved normally
+            edgeFound = (fineStepsTaken >= CAL_FINE_SWEEP_STEPS);   // safety cap
           }
-          if (!sweepDone) {
+          if (!edgeFound) {
             changeState(STATE_CAL_DOWN_WRITE);
           }
         }
-        if (sweepDone) {
+        if (edgeFound) {
           // The real down edge: the last pulse that actually moved, not
-          // wherever the fixed sweep happened to end. Clamped against
+          // wherever it happened to stop. Clamped against
           // coarseConfirmedUs as a defensive backstop -- see
           // lastNormalFineUs's own comment for why that should never
           // actually fire.
@@ -1555,22 +1551,18 @@ void loop() {
     case STATE_CAL_UP_WAIT:
       // Mirrors STATE_CAL_DOWN_WAIT throughout, see its own comments.
       if (currentPhase == PHASE_FINE) {
-        bool sweepDone = spinRecovered;
+        bool edgeFound = spinRecovered || stepDeltaStall || stepDeltaAnomaly || stepDeltaReversed;
         spinRecovered = false;
-        if (!sweepDone && (stepDeltaAnomaly || stepDeltaReversed)) {
-          sweepDone = true;
-        } else if (!sweepDone && isSettled) {
+        if (!edgeFound && isSettled) {
           if (fineStepsTaken > 0) {
-            if (!stepDeltaStall) {
-              lastNormalFineUs = lastSentUs;
-            }
-            sweepDone = (fineStepsTaken >= CAL_FINE_SWEEP_STEPS);
+            lastNormalFineUs = lastSentUs;
+            edgeFound = (fineStepsTaken >= CAL_FINE_SWEEP_STEPS);   // safety cap
           }
-          if (!sweepDone) {
+          if (!edgeFound) {
             changeState(STATE_CAL_UP_WRITE);
           }
         }
-        if (sweepDone) {
+        if (edgeFound) {
           // Here "more conservative" means lower pulse, less travel --
           // the mirror image of STATE_CAL_DOWN_WAIT's own clamp.
           maxUs = lastNormalFineUs;
