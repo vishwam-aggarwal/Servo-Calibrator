@@ -36,9 +36,17 @@ an actual `RCServoMotorDriver`/`PCA9685MotorDriver` constructor
 application code consumes this tool's exported JSON — that's an
 installation concern, this tool has no way to know it.
 
-Depends on two sibling libraries, **Universal-Motor-Interface** and
-**Universal-Trajectory-Interface** (both mine, both currently private —
-see the README's dependency table). Grew out of `Servo_Auto_Calibrator`
+Depends on one sibling library, **Universal-Trajectory-Interface**
+(mine, public — see the README's dependency table) — the firmware only
+`#include`s its `TrapezoidalProfile.h`. **Not** Universal-Motor-Interface:
+despite several comments in `ServoCalibrator_Companion.ino` comparing its
+own hand-rolled `CalPoint`/table-interpolation code to UMI's
+`ServoCalibrationTable.h` (same idea, deliberately NOT the same
+`int16_t` field width — see that file's own comments), it's a
+self-contained reimplementation, not an actual include — this firmware
+has no real UMI dependency at all, unlike the old, retired companion
+firmware it replaced (see the next section) which genuinely did call
+UMI's functions directly. Grew out of `Servo_Auto_Calibrator`
 (a hand-built, single-servo characterization project) — its raw CSVs are
 archived in [`historical-data/`](historical-data/); see that folder's
 own README for what they are.
@@ -1370,13 +1378,49 @@ verification above: before `applyCalibration()`, neither tab has the
 "LINEAR"`) and `Table` doesn't; after a simulated disconnect, both
 clear and `currentModel` returns to `null`.
 
+## Universal-Trajectory-Interface goes public; a stale dependency claim caught and fixed (2026-08-22)
+
+Universal-Trajectory-Interface flipped to public. Prompted a direct
+question worth taking seriously rather than assuming: does
+`ServoCalibrator_Companion` still have a private dependency? Checking
+the actual `.ino` (not this file's own prior claims) found the "What
+this is"/"Requirements & dependencies" sections above had been stale
+since the 2026-08-21 FSM rewrite — they still described the firmware as
+unconditionally needing **both** Universal-Motor-Interface and
+Universal-Trajectory-Interface, copied forward from the *old*, retired
+companion firmware (which genuinely did call UMI's
+`ServoCalibrationTable.h` functions directly — see the "Why
+`RCServoMotorDriver` couldn't be reused" section way above). The current
+`.ino` only `#include`s `<TrapezoidalProfile.h>` — its `CalPoint`/
+`interpolateTable()`/table code is a full local reimplementation
+(deliberately not even the same field width as UMI's version — `int32_t`
+vs. UMI's `int16_t`, to handle multi-turn positions UMI's bounded-range
+assumption doesn't), just commented as "same idea as UMI's own type" for
+readers familiar with that project, never an actual include. This
+firmware never had a real UMI dependency at all, since the rewrite.
+
+**So the real, corrected answer**: as of Universal-Trajectory-Interface
+going public, `ServoCalibrator_Companion` has **zero** remaining private
+dependencies — just not for the reason first assumed (not because both
+libraries went public, but because only one was ever a genuine build
+dependency to begin with, and that one now is). Fixed both this file's
+"What this is" summary and the section below, and README's own
+dependency table/"calibration table" section, to stop claiming a UMI
+build dependency that hasn't existed since 2026-08-21. UMI's `CalPoint`
+type is still relevant *downstream* — the exported JSON's points are
+meant to be pasted into an actual `RCServoMotorDriver`/
+`PCA9685MotorDriver` table constructor by a consuming application, which
+does need UMI — just not to build/upload this sketch itself.
+
 ## Requirements & dependencies
 
-Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
-now unconditionally needs **both** Universal-Motor-Interface
-(`ServoCalibrationTable.h`) and Universal-Trajectory-Interface
-(`TrapezoidalProfile`), plus RobTillaart's `AS5600` (public). No PCA9685
+`ServoCalibrator_Companion` needs Universal-Trajectory-Interface
+(`TrapezoidalProfile`, mine, **public**) and RobTillaart's `AS5600`
+(public) — that's it. **Not** Universal-Motor-Interface, despite this
+file's own prior claim otherwise (see the entry above) — the firmware's
+calibration-table code is a self-contained reimplementation, no
+`ServoCalibrationTable.h` include anywhere in the `.ino`. No PCA9685
 support in this firmware yet (the old wizard-era version had it — see
-git history; `ServoCalibrationTable.h`'s math is transport-agnostic, so
-adding it back would mean swapping the raw `Servo` calls for
+git history; the table-interpolation math here is transport-agnostic
+too, so adding it back would mean swapping the raw `Servo` calls for
 `PCA9685Backend` ones, not touching the calibration/table logic at all).
