@@ -926,6 +926,90 @@ disagree on chart width — `article.md`'s charts match the text column,
 don't wrap — via a `.data-page` class scoping the breakout CSS to the
 data route only, not a per-file setting in either markdown file.
 
+## ServoAutoCalibrator: continuous telemetry, PING, and a false alarm that turned out to be test-tooling, not firmware (2026-08-21)
+
+Per explicit direction, `ServoAutoCalibrator` is meant to become this
+project's **final** interactive calibrator, eventually replacing
+`ServoCalibrator.html`/`ServoCalibrator_Companion` — not a permanent
+second tool living alongside it. This session closed the two gaps
+identified for that: the firmware had no continuous telemetry stream
+for a future host page to plot, and no host page existed yet at all.
+The page itself is still unbuilt; this entry covers the firmware side.
+
+**Continuous `TELEM` stream.** Every tick, unconditionally (idle,
+mid-calibration, or mid-move), the firmware now prints
+`TELEM <millis> <targetCentideg> <targetVelCentidegPerSec> <actualCentideg> <actualVelCentidegPerSec>`.
+`target*` comes straight from `STATE_TRAJ_STREAM`'s own per-tick
+`TrapezoidalProfile::evaluate()` output (held at the destination once a
+move ends, velocity explicitly zeroed then); `actual*` comes from the
+real encoder — position from the existing smoothed `filteredPosition`,
+velocity from `encoderDerivative` (already computed every tick for
+wrap-detection, just never previously used for anything else).
+Position **error** is deliberately not computed/sent by the firmware —
+a future host page computes `actual - target` itself, matching the
+existing `ServoCalibrator.html` convention (its error chart is
+labeled exactly that way) and its own `T,<elapsed>,<setpoint>,<vel>,
+<actual>,...` wire format's same underlying design: stream the raw
+setpoint/actual pair, let the client derive error. Replaces a leftover
+`TRAJSTEP` debug trace that was marked "remove once diagnosed" — the
+issue it was diagnosing (jerky small-step motion) was already resolved
+per this file's earlier verification note.
+
+**`CMD_PING` added.** Every sibling firmware in this project
+(`ServoDAQ_Companion`, `ServoCalibrator_Companion`) has one; this one
+didn't, despite an earlier note in this file claiming it had already
+been verified — that claim was simply wrong, caught and corrected
+here. `PING` is exempt from the busy-gate (pure liveness check, no
+side effects) so a host page can confirm the connection is alive
+without waiting out an in-progress run.
+
+**No square/sine to drop.** The request to drop the continuous
+square-wave/sine-wave generators turned out to already be satisfied:
+`ServoAutoCalibrator` never had `CMD_SQUARE`/`CMD_SINE` in the first
+place (those only ever existed in `ServoCalibrator_Companion`) — it's
+always been `GO`-only, single point-to-point trapezoidal moves. Now
+stated explicitly in the file's own header comment so it stays that
+way on purpose.
+
+**A real hardware scare that wasn't a firmware bug.** A live test run
+looked like calibration was permanently stuck deep in
+`CAL_TABLE_WAIT` — no state change for 40+ seconds, well past the
+3-second settle-timeout that should have forced it back to `IDLE` if
+it genuinely couldn't settle. Chased hard before concluding anything:
+confirmed the device was still alive and ticking the whole time (not
+hung — `TELEM` never stopped), confirmed `isWaitingState()`/the
+generic timeout code read correctly on inspection, and eventually
+found the real cause by re-running with every line captured
+unfiltered: **all 40 table entries (both passes) were actually being
+recorded successfully every time** — the "stall" was the servo
+correctly finishing calibration and going idle, not failing partway
+through. The false alarm came from two compounding test-harness bugs,
+not the device: (1) a naive single-line-per-command reply reader
+raced against the continuous 50Hz `TELEM` stream and consumed
+telemetry lines instead of the actual `OK`/`ERR` reply, misdelivering
+every reply after by one slot — the *exact* failure class this file's
+own 2026-08-10 entries already documented for the old tool's browser
+`SerialLink`, just reproduced independently in a Python test script
+instead of JS; (2) occasional dropped/garbled leading bytes on lines
+(the same USB-serial-adapter artifact documented back in the boot-time
+serial garbage entry) hid a `PROGRESS CAL_DONE` line from simpler
+diagnostics that only recognized a state transition by matching an
+exact line prefix. Fixed the *test script*, not the firmware: a
+reply reader that explicitly skips non-reply lines until it finds one
+starting with `OK`/`ERR`, rather than assuming "the next line" is
+always the reply. Confirmed clean twice in a row after that fix: 40/40
+table entries, `GO` accepted, and the servo genuinely moved (a real
+~221° swing) in response.
+
+**Forward-looking lesson for the still-unbuilt host page**: it cannot
+use a naive "read one line, assume it's the reply" pattern once
+`TELEM` is streaming continuously — it needs the same kind of
+request/reply-vs-telemetry line classification `ServoCalibrator.html`'s
+own `SerialLink` already implements (recognize `OK`/`ERR` lines as
+command replies, route everything else to a telemetry handler),
+learned here by hitting the exact bug in a test harness before ever
+writing the real client.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`

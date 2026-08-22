@@ -1,16 +1,23 @@
 /*
   ServoAutoCalibrator
 
-  On-device servo range-finding/calibration, as a finite state machine.
-  States and transitions still to be filled in -- for now, just the
-  fixed-tick skeleton plus the housekeeping that runs ahead of the state
-  switch every tick: reading the AS5600, and checking for an incoming
-  serial command that might reject outright or force a state change
-  (e.g. ABORT) before that tick's state logic runs.
+  On-device servo range-finding/calibration, as a finite state machine --
+  coarse+fine stall-scan calibration (with active spin-recovery), then a
+  single point-to-point trapezoidal trajectory move on demand (CMD_GO,
+  no continuous square-wave/sine-wave generator -- unlike this project's
+  older ServoCalibrator_Companion sibling, this firmware deliberately
+  only ever streams one planned move at a time). Every tick, regardless
+  of state, streams a TELEM line (see printTelemetry()) reporting both
+  the trajectory's current target and the actual measured shaft state,
+  for a host app to plot live.
 
   Runs on one fixed-rate tick (see TICK_INTERVAL_MS below); the state
   machine itself is a single switch/case in loop(), one case per enum
-  value in CalibrationState.
+  value in CalibrationState. The housekeeping that runs ahead of that
+  switch every tick -- reading the AS5600, checking for an incoming
+  serial command that might reject outright or force a state change
+  (e.g. ABORT) before that tick's state logic runs, and streaming
+  telemetry -- happens the same way regardless of which state is active.
 */
 
 #define LOOP_FREQUENCY_HZ 50    // fixed tick rate -- every timing constant below derives from this
@@ -179,6 +186,7 @@ enum TestStage {
 // than re-comparing strings at every call site as more commands get added.
 enum SerialCommand {
   CMD_UNKNOWN,
+  CMD_PING,
   CMD_CAL,
   CMD_ABORT,
   CMD_ACCEL,
@@ -499,6 +507,67 @@ TrapezoidalProfile trajProfile;   // planned once by STATE_TRAJ_PLAN, evaluated 
                                    // STATE_TRAJ_STREAM until it reports settled
 unsigned long trajStartMs = 0;    // millis() at the moment STATE_TRAJ_PLAN planned the move --
                                    // STATE_TRAJ_STREAM's elapsed time is relative to this
+
+// The trajectory's own current target, in the same centideg-scaled terms
+// printTelemetry() reports the actual measured position/velocity in --
+// both set every STATE_TRAJ_STREAM tick, from the same pos/vel that
+// tick's evaluate() call already produces to compute the pulse it writes
+// (see that case body). lastTrajTargetCentideg is deliberately NOT reset
+// anywhere else -- it holds at wherever the most recent move was headed
+// (0, i.e. the boot reference, before the first GO ever runs), the same
+// way a real setpoint would, so the html app's position-error chart
+// (actual - target, matching this project's existing ServoCalibrator.html
+// convention) reads a small, meaningful settling error after a move
+// finishes rather than snapping to some arbitrary stale or undefined
+// value. trajTargetVelCentidegPerSec, in contrast, IS explicitly zeroed
+// the instant STATE_TRAJ_STREAM hands off to STATE_TRAJ_WAIT (see that
+// case body) -- once nothing is actively being commanded to move, the
+// planned velocity is genuinely 0, not "whatever the last tick's value
+// happened to be."
+int32_t lastTrajTargetCentideg = 0;
+int32_t trajTargetVelCentidegPerSec = 0;
+
+// Streamed every tick, unconditionally -- idle, mid-calibration, or
+// mid-move -- unlike printProgress() (gated to isCalibrationState()): the
+// html app's rolling charts need continuous coverage of the whole
+// session, not just the calibration routine. Reports both the trajectory's
+// current target and the actual measured shaft state, in centidegrees/
+// centideg-per-second, so the html app can plot position and velocity
+// directly and then compute + plot position error (actual - target,
+// matching this project's existing ServoCalibrator.html convention)
+// itself -- one fewer thing this firmware needs to get right, since the
+// html app already has both numbers it needs to do that subtraction on
+// its own.
+//
+// actualVelCentidegPerSec comes from encoderDerivative (the raw,
+// unfiltered per-tick delta computed once in loop() -- see its own
+// comment) rather than differencing filteredPosition here: the position
+// filter's whole purpose is smoothing AS5600 quantization noise for a
+// *reported position*, so differencing that already-smoothed signal would
+// just reintroduce lag without removing any noise a second time.
+// encoderDerivative already exists, computed fresh every tick, specifically
+// for a use like this.
+//
+// Deliberately its own wire format (TELEM, space-separated, printed
+// directly rather than through printMessage()) instead of folding into
+// PROGRESS -- printMessage()'s elapsed-time-since-state-entry prefix and
+// raw-filteredPosition suffix are framing built for state-transition
+// logging, not a fixed-rate telemetry stream a chart wants to index by
+// wall-clock time.
+void printTelemetry() {
+  int32_t actualCentideg = currentAngleCentideg();
+  int32_t actualVelCentidegPerSec = (int32_t)(encoderDerivative * 36000L / 4096L * (long)LOOP_FREQUENCY_HZ);
+  Serial.print(F("TELEM "));
+  Serial.print(millis());
+  Serial.print(' ');
+  Serial.print(lastTrajTargetCentideg);
+  Serial.print(' ');
+  Serial.print(trajTargetVelCentidegPerSec);
+  Serial.print(' ');
+  Serial.print(actualCentideg);
+  Serial.print(' ');
+  Serial.println(actualVelCentidegPerSec);
+}
 
 int currentStepUs = CAL_COARSE_STEP_US;   // step size STATE_CAL_DOWN_WRITE/STATE_CAL_UP_WRITE use --
                                            // CAL_COARSE_STEP_US or CAL_FINE_STEP_US, set by
@@ -825,16 +894,29 @@ int tablePulseUs(int index) {
   return minUs + (int)((long)(maxUs - minUs) * index / (CAL_TABLE_POINTS - 1));
 }
 
-// Called from STATE_CAL_TABLE_WAIT once a table point settles.
-// totalCounts (continuous, unwrapped -- see updatePositionTracking())
-// -> centidegrees via plain integer math (exact ratio 36000/4096 -- no
-// float needed for a one-shot conversion like this, though it'd hardly
-// matter at only CAL_TABLE_POINTS calls). No truncating cast to int16_t
-// here -- angleCentideg is int32_t precisely so this doesn't need one.
-// Index progression is the caller's job now (STATE_CAL_TABLE_WAIT), since
-// which direction "next" means depends on tableSweepDown.
+// filteredPosition (continuous, unwrapped counts -- see
+// updatePositionTracking()) -> centidegrees, via plain integer math (exact
+// ratio 36000/4096 -- no float needed). Shared by recordTableEntry() below
+// (one reading per settle, during calibration) and printTelemetry() further
+// down (the actual-position field of every tick's stream) -- both want the
+// same conversion of the same underlying value, just at different times.
+// Defined here, ahead of recordTableEntry()'s own use of it, but Arduino
+// auto-generates a forward declaration for every function in the file
+// (the same reason CalPoint had to be hand-placed near the top instead --
+// see its own comment -- except that applies to types, which don't get
+// this treatment, only function signatures do), so call-before-definition
+// order elsewhere in this file is never actually a problem.
+int32_t currentAngleCentideg() {
+  return (int32_t)(filteredPosition * 36000L / 4096L);
+}
+
+// Called from STATE_CAL_TABLE_WAIT once a table point settles. No
+// truncating cast to int16_t here -- angleCentideg is int32_t precisely so
+// this doesn't need one. Index progression is the caller's job now
+// (STATE_CAL_TABLE_WAIT), since which direction "next" means depends on
+// tableSweepDown.
 void recordTableEntry() {
-  int32_t angleCentideg = filteredPosition * 36000L / 4096L;
+  int32_t angleCentideg = currentAngleCentideg();
   if (tableSweepDown) {
     // First (down) pass -- raw reading, nothing to average against yet.
     calTable[tableIndex].pulseUs = lastSentUs;
@@ -964,6 +1046,7 @@ void updateSettled(long currentRaw) {
 // below) -- a plain strcmp against the whole line stopped being enough
 // once ACCEL/VEL/POS needed an argument after the command word.
 SerialCommand parseCommand(const char* cmdTok) {
+  if (strcmp(cmdTok, "PING") == 0) return CMD_PING;
   if (strcmp(cmdTok, "CAL") == 0) return CMD_CAL;
   if (strcmp(cmdTok, "ABORT") == 0) return CMD_ABORT;
   if (strcmp(cmdTok, "ACCEL") == 0) return CMD_ACCEL;
@@ -1004,19 +1087,24 @@ int tokenizeLine(char* line) {
 // else is rejected. GO plans and starts a trajectory move to
 // targetPositionDeg -- rejected (ERR NOT_CALIBRATED) until isCalibrated.
 // While calibrationRunning or trajectoryRunning, every command except
-// ABORT is rejected outright -- nothing overlaps a run in progress.
-// Anything unrecognized, or with the wrong number of arguments, is
-// rejected too.
+// ABORT is rejected outright -- nothing overlaps a run in progress. PING
+// is the other deliberate exception: a pure liveness check, no side
+// effects, so a host app can confirm the connection is alive without
+// having to wait out whatever run is in progress. Anything unrecognized,
+// or with the wrong number of arguments, is rejected too.
 void handleLine(char* line) {
   int n = tokenizeLine(line);
   if (n == 0) return;
 
   SerialCommand cmd = parseCommand(tok[0]);
-  if ((calibrationRunning || trajectoryRunning || rawSweepRunning) && cmd != CMD_ABORT) {
+  if ((calibrationRunning || trajectoryRunning || rawSweepRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
     Serial.println(F("ERR BUSY"));
     return;
   }
   switch (cmd) {
+    case CMD_PING:
+      Serial.println(F("OK PING"));
+      break;
     case CMD_CAL:
       calibrationRunning = true;
       changeState(STATE_CAL_CENTER);
@@ -1172,6 +1260,8 @@ void loop() {
 
   updateFilteredPosition(currentTotal);   // every tick -- keeps filteredPosition current for printMessage()
   updateSettled(currentTotal);   // every tick -- reacts to any move writeServoUs() just commanded
+
+  printTelemetry();   // every tick, unconditionally, regardless of state -- see its own comment
 
   if (isCalibrationState(currentState)) {   // every tick, the whole way through calibration -- see printProgress()
     printProgress();
@@ -1576,14 +1666,21 @@ void loop() {
       int32_t angleCentideg = (int32_t)(pos * 100.0f + (pos >= 0.0f ? 0.5f : -0.5f));
       uint16_t pulse = pulseForAngleCentideg(angleCentideg);
       writeServoUs(pulse);
-      {
-        // TEMPORARY diagnostic trace -- investigating reported jerky
-        // motion on small moves. Remove once diagnosed.
-        char dbuf[64];
-        snprintf(dbuf, sizeof(dbuf), "TRAJSTEP %lu %ld %u", (unsigned long)(t * 1000), (long)angleCentideg, pulse);
-        printMessage(dbuf);
-      }
+
+      // Feeds printTelemetry() -- the html app's position/velocity charts
+      // plot this planned target against the actual measured values
+      // printTelemetry() reports alongside it every tick.
+      lastTrajTargetCentideg = angleCentideg;
+      trajTargetVelCentidegPerSec = (int32_t)(vel * 100.0f + (vel >= 0.0f ? 0.5f : -0.5f));
+
       if (!stillMoving) {
+        // The plan has ended -- nothing is being commanded to move
+        // anymore, so the reported target velocity should genuinely read
+        // 0 from here on, not linger at whatever this last tick's value
+        // happened to be (see trajTargetVelCentidegPerSec's own comment).
+        // lastTrajTargetCentideg is left alone -- it correctly holds at
+        // the destination through STATE_TRAJ_WAIT and beyond.
+        trajTargetVelCentidegPerSec = 0;
         changeState(STATE_TRAJ_WAIT);
       }
       break;
