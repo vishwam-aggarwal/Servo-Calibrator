@@ -1675,14 +1675,16 @@ Top: every trial's signed error (actual minus target), one box per model &mdash;
 
 ## Error by target angle
 
-Mean |error| binned into ten deciles across this unit's own commanded-angle range, comparing the naive linear model (amber) against a 20-point table (blue) &mdash; shows *where* in the range a model is worst, which a single aggregate number hides.
+Mean |error| binned into ten deciles across this unit's own commanded-angle range, all six models &mdash; shows *where* in the range a model is worst, which a single aggregate number hides. linear2 is drawn heavier since it's the point of comparison; the five table sizes usually sit close enough to overlap, which is the same diminishing-returns story as the section above, just plotted against angle instead of trial count.
+
+<p class="chart-legend"><span><span class="swatch" style="background: var(--model-linear2);"></span>linear2</span><span><span class="swatch" style="background: var(--model-table10);"></span>table10</span><span><span class="swatch" style="background: var(--model-table20);"></span>table20</span><span><span class="swatch" style="background: var(--model-table30);"></span>table30</span><span><span class="swatch" style="background: var(--model-table40);"></span>table40</span><span><span class="swatch" style="background: var(--model-table50);"></span>table50</span></p>
 
 ### Miuzei 25kg Servo
 
 <div class="chart-figure">
 <div class="subplot-grid">
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 1, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 1, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 1</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1691,35 +1693,79 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <line x1="34" y1="10.0" x2="294" y2="10.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">2.2&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">-27&#176;</text>
-<text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">182&#176;</text>
-<polyline points="34.0,118.7 62.9,141.7 91.8,109.3 120.7,75.5 149.6,139.9 178.4,176.2 207.3,127.2 236.2,102.6 265.1,37.7 294.0,125.4" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="118.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="141.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="109.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="75.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="139.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="176.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="127.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="102.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="125.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,189.7 62.9,197.7 91.8,190.1 120.7,195.1 149.6,180.2 178.4,186.9 207.3,179.9 236.2,181.2 265.1,197.9 294.0,197.2" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="189.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="197.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="190.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="195.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="180.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="186.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="179.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="181.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="197.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="197.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">183&#176;</text>
+<polyline points="34.0,118.7 62.9,141.7 91.8,109.3 120.7,75.5 149.6,139.9 178.4,176.2 207.3,127.5 236.2,102.0 265.1,37.7 294.0,125.4" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="118.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="141.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="109.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="75.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="139.9" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="176.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="127.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="102.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="125.4" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,168.5 62.9,188.3 91.8,192.4 120.7,177.0 149.6,179.0 178.4,187.0 207.3,186.1 236.2,178.8 265.1,191.3 294.0,193.8" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="168.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="188.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="192.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="177.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="179.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="187.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="186.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="178.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="191.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="193.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,189.8 62.9,197.4 91.8,190.1 120.7,195.1 149.6,180.1 178.4,187.0 207.3,179.9 236.2,181.2 265.1,197.9 294.0,197.2" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="189.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="197.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="190.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="195.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="180.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="187.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="179.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="181.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="197.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="197.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,189.4 62.9,185.9 91.8,196.2 120.7,185.3 149.6,176.5 178.4,190.8 207.3,188.5 236.2,187.0 265.1,196.7 294.0,194.0" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="189.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="185.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="196.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="185.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="176.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="190.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="187.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="196.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="194.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,196.1 62.9,189.6 91.8,197.2 120.7,195.3 149.6,185.4 178.4,192.1 207.3,183.4 236.2,187.1 265.1,202.6 294.0,202.1" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="196.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="189.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="197.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="195.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="185.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="192.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="183.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="187.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="202.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="202.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,201.6 62.9,192.2 91.8,198.0 120.7,189.1 149.6,185.5 178.4,192.0 207.3,184.7 236.2,184.9 265.1,193.5 294.0,196.8" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="201.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="192.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="198.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="189.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="185.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="192.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="184.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="184.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="193.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="196.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 1 &mdash; linear2 (amber) vs. table20 (blue).</p>
 </div>
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 2, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 2, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 2</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1729,34 +1775,78 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">1.3&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">-120&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">93&#176;</text>
-<polyline points="34.0,142.9 62.9,95.9 91.8,51.9 120.7,129.0 149.6,147.1 178.4,89.0 207.3,126.6 236.2,148.0 265.1,60.9 294.0,37.7" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="142.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="95.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="51.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="129.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="147.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="89.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="126.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="148.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="60.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,156.9 62.9,159.0 91.8,167.5 120.7,174.1 149.6,159.6 178.4,160.9 207.3,139.2 236.2,136.8 265.1,118.6 294.0,138.8" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="156.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="159.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="167.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="174.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="159.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="160.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="139.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="136.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="118.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="138.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,142.4 62.9,95.1 91.8,50.9 120.7,128.4 149.6,146.6 178.4,87.6 207.3,126.0 236.2,147.8 265.1,56.8 294.0,37.7" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="142.4" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="95.1" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="50.9" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="128.4" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="146.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="87.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="126.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="147.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="56.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,150.5 62.9,136.8 91.8,170.3 120.7,169.9 149.6,166.8 178.4,162.1 207.3,120.8 236.2,154.0 265.1,149.8 294.0,136.0" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="150.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="136.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="170.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="169.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="166.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="162.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="120.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="154.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="149.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="136.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,156.5 62.9,158.6 91.8,167.2 120.7,173.9 149.6,159.3 178.4,160.5 207.3,138.7 236.2,136.3 265.1,118.9 294.0,137.7" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="156.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="158.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="167.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="173.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="159.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="160.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="138.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="136.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="118.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="137.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,162.8 62.9,142.5 91.8,163.9 120.7,177.3 149.6,167.6 178.4,167.6 207.3,136.7 236.2,130.2 265.1,139.7 294.0,130.4" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="162.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="142.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="163.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="177.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="167.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="167.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="136.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="130.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="139.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="130.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,170.0 62.9,149.9 91.8,161.6 120.7,179.9 149.6,160.2 178.4,166.9 207.3,114.8 236.2,143.3 265.1,147.7 294.0,149.0" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="170.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="149.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="161.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="179.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="160.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="166.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="114.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="143.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="147.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="149.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,164.6 62.9,142.3 91.8,167.4 120.7,177.3 149.6,167.8 178.4,172.4 207.3,126.3 236.2,137.6 265.1,135.5 294.0,144.3" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="164.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="142.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="167.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="177.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="167.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="172.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="126.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="137.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="135.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="144.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 2 &mdash; linear2 (amber) vs. table20 (blue).</p>
 </div>
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 3, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Miuzei 25kg Servo unit 3, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 3</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1766,28 +1856,72 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">1.8&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">-134&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">78&#176;</text>
-<polyline points="34.0,130.0 62.9,59.1 91.8,37.7 120.7,128.8 149.6,168.4 178.4,171.7 207.3,134.0 236.2,150.2 265.1,166.1 294.0,186.3" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="130.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="59.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="128.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="168.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="171.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="134.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="150.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="166.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="186.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,192.6 62.9,181.1 91.8,175.5 120.7,166.5 149.6,175.0 178.4,181.6 207.3,160.1 236.2,166.5 265.1,167.2 294.0,175.9" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="192.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="181.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="175.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="166.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="175.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="181.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="160.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="166.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="167.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="175.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,129.9 62.9,60.7 91.8,37.7 120.7,128.0 149.6,168.7 178.4,171.7 207.3,134.0 236.2,150.3 265.1,166.2 294.0,186.3" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="129.9" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="60.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="128.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="168.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="171.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="134.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="150.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="166.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="186.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,177.7 62.9,182.1 91.8,177.4 120.7,169.4 149.6,166.8 178.4,171.3 207.3,158.1 236.2,161.1 265.1,164.0 294.0,196.2" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="177.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="182.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="177.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="169.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="166.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="171.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="158.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="161.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="164.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="196.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,192.6 62.9,181.1 91.8,175.5 120.7,166.5 149.6,175.0 178.4,181.6 207.3,160.1 236.2,166.5 265.1,167.2 294.0,175.9" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="192.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="181.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="175.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="166.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="175.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="181.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="160.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="166.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="167.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="175.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,176.6 62.9,178.7 91.8,172.3 120.7,174.1 149.6,173.7 178.4,177.7 207.3,164.5 236.2,157.7 265.1,166.0 294.0,178.9" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="176.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="178.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="172.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="174.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="173.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="177.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="164.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="157.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="166.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="178.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,185.2 62.9,174.1 91.8,164.6 120.7,168.3 149.6,172.4 178.4,171.5 207.3,159.0 236.2,163.3 265.1,174.2 294.0,174.9" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="185.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="174.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="164.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="168.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="172.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="171.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="159.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="163.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="174.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="174.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,184.7 62.9,180.7 91.8,163.6 120.7,170.3 149.6,180.7 178.4,167.4 207.3,167.6 236.2,161.5 265.1,180.8 294.0,175.3" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="184.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="180.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="163.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="170.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="180.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="167.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="167.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="161.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="180.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="175.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 3 &mdash; linear2 (amber) vs. table20 (blue).</p>
@@ -1800,7 +1934,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <div class="chart-figure">
 <div class="subplot-grid">
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 1, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 1, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 1</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1810,34 +1944,78 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">3.2&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">148&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">292&#176;</text>
-<polyline points="34.0,208.5 62.9,191.3 91.8,169.4 120.7,117.9 149.6,50.0 178.4,37.7 207.3,55.1 236.2,99.6 265.1,159.0 294.0,211.0" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="208.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="191.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="169.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="117.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="50.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="55.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="99.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="159.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="211.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,193.2 62.9,187.4 91.8,190.5 120.7,190.4 149.6,188.5 178.4,193.9 207.3,190.8 236.2,184.3 265.1,190.2 294.0,198.0" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="193.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="187.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="190.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="190.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="188.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="193.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="190.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="184.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="190.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="198.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,208.4 62.9,191.2 91.8,169.3 120.7,117.7 149.6,49.2 178.4,37.7 207.3,55.0 236.2,99.5 265.1,159.3 294.0,210.9" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="208.4" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="191.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="169.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="117.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="49.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="55.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="99.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="159.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="210.9" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,202.4 62.9,175.6 91.8,189.0 120.7,191.0 149.6,189.6 178.4,195.7 207.3,188.9 236.2,184.5 265.1,184.2 294.0,196.8" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="202.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="175.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="189.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="191.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="189.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="195.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="184.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="184.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="196.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,193.0 62.9,187.5 91.8,190.5 120.7,190.3 149.6,188.2 178.4,194.1 207.3,190.5 236.2,184.3 265.1,190.1 294.0,198.0" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="193.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="187.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="190.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="190.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="188.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="194.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="190.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="184.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="190.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="198.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,187.5 62.9,178.2 91.8,191.6 120.7,188.7 149.6,191.5 178.4,191.7 207.3,188.7 236.2,187.2 265.1,191.9 294.0,197.2" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="187.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="178.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="191.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="188.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="191.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="191.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="187.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="191.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="197.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,190.4 62.9,185.2 91.8,193.8 120.7,189.6 149.6,189.6 178.4,192.8 207.3,188.4 236.2,186.0 265.1,190.8 294.0,192.7" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="190.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="185.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="193.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="189.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="189.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="192.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="186.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="190.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="192.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,192.6 62.9,181.3 91.8,188.4 120.7,190.5 149.6,190.0 178.4,191.2 207.3,189.7 236.2,186.1 265.1,193.9 294.0,198.8" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="192.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="181.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="188.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="190.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="190.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="191.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="189.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="186.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="193.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="198.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 1 &mdash; linear2 (amber) vs. table20 (blue).</p>
 </div>
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 2, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 2, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 2</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1847,34 +2025,78 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">2.0&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">255&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">388&#176;</text>
-<polyline points="34.0,183.1 62.9,134.3 91.8,81.5 120.7,37.7 149.6,55.6 178.4,55.5 207.3,63.5 236.2,67.8 265.1,92.7 294.0,180.7" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="183.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="134.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="81.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="55.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="55.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="63.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="67.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="92.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="180.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,206.8 62.9,194.0 91.8,184.5 120.7,196.1 149.6,199.8 178.4,202.2 207.3,188.4 236.2,190.7 265.1,191.3 294.0,192.1" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="206.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="194.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="184.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="196.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="199.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="202.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="188.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="190.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="191.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="192.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,183.1 62.9,134.3 91.8,81.5 120.7,37.7 149.6,55.6 178.4,55.5 207.3,63.5 236.2,67.8 265.1,92.7 294.0,180.7" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="183.1" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="134.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="81.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="55.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="55.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="63.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="67.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="92.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="180.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,198.8 62.9,203.1 91.8,187.7 120.7,198.7 149.6,195.3 178.4,194.6 207.3,192.2 236.2,187.2 265.1,192.5 294.0,197.4" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="198.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="203.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="187.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="198.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="195.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="194.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="192.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="187.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="192.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="197.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,207.5 62.9,194.2 91.8,183.2 120.7,195.9 149.6,201.4 178.4,201.8 207.3,188.8 236.2,190.1 265.1,191.3 294.0,192.1" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="207.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="194.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="183.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="195.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="201.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="201.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="190.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="191.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="192.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,200.3 62.9,203.2 91.8,188.7 120.7,198.1 149.6,193.5 178.4,193.6 207.3,193.9 236.2,191.2 265.1,191.5 294.0,196.5" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="200.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="203.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="188.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="198.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="193.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="193.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="193.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="191.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="191.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="196.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,193.9 62.9,195.2 91.8,187.4 120.7,200.0 149.6,197.3 178.4,196.5 207.3,197.2 236.2,191.8 265.1,199.3 294.0,196.5" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="193.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="195.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="187.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="200.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="197.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="196.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="197.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="191.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="199.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="196.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,192.8 62.9,199.6 91.8,191.1 120.7,199.0 149.6,197.3 178.4,191.0 207.3,197.3 236.2,195.7 265.1,193.7 294.0,196.9" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="192.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="199.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="191.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="199.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="197.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="191.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="197.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="195.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="193.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="196.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 2 &mdash; linear2 (amber) vs. table20 (blue).</p>
 </div>
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 3, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for Knockoff MG996R unit 3, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 3</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1882,30 +2104,74 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="119.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">1.0&#176;</text>
 <line x1="34" y1="10.0" x2="294" y2="10.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">2.1&#176;</text>
-<text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">153&#176;</text>
+<text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">152&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">295&#176;</text>
-<polyline points="34.0,193.8 62.9,132.5 91.8,79.2 120.7,59.1 149.6,37.7 178.4,81.8 207.3,158.2 236.2,201.8 265.1,198.5 294.0,180.6" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="193.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="132.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="79.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="59.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="81.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="158.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="201.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="198.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="180.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,198.8 62.9,200.6 91.8,206.0 120.7,198.8 149.6,205.2 178.4,199.4 207.3,202.4 236.2,199.5 265.1,201.2 294.0,195.4" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="198.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="200.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="206.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="198.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="205.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="199.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="202.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="199.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="201.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="195.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,193.8 62.9,132.6 91.8,79.2 120.7,60.0 149.6,37.7 178.4,81.3 207.3,158.2 236.2,201.8 265.1,198.5 294.0,180.6" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="193.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="132.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="79.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="60.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="81.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="158.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="201.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="198.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="180.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,196.5 62.9,206.8 91.8,210.7 120.7,205.7 149.6,207.2 178.4,196.9 207.3,198.3 236.2,202.5 265.1,208.3 294.0,178.4" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="196.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="206.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="210.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="205.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="207.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="196.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="198.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="202.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="208.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="178.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,198.6 62.9,200.7 91.8,206.0 120.7,198.8 149.6,205.2 178.4,199.6 207.3,202.4 236.2,198.8 265.1,201.7 294.0,195.5" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="198.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="200.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="206.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="198.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="205.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="199.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="202.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="198.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="201.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="195.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,197.5 62.9,200.0 91.8,207.1 120.7,204.1 149.6,209.6 178.4,202.5 207.3,199.6 236.2,200.2 265.1,202.0 294.0,198.9" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="197.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="200.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="207.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="204.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="209.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="202.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="199.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="200.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="202.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="198.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,196.3 62.9,205.0 91.8,208.8 120.7,203.5 149.6,210.3 178.4,206.3 207.3,203.2 236.2,199.7 265.1,204.0 294.0,195.8" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="196.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="205.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="208.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="203.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="210.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="206.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="203.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="199.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="204.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="195.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,198.2 62.9,201.6 91.8,205.1 120.7,208.1 149.6,204.7 178.4,203.6 207.3,201.9 236.2,204.6 265.1,205.4 294.0,205.0" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="198.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="201.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="205.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="208.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="204.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="203.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="201.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="204.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="205.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="205.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 3 &mdash; linear2 (amber) vs. table20 (blue).</p>
@@ -1918,7 +2184,7 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <div class="chart-figure">
 <div class="subplot-grid">
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 1, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 1, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 1</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1928,34 +2194,78 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">2.7&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">-62&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">155&#176;</text>
-<polyline points="34.0,160.6 62.9,170.0 91.8,173.2 120.7,145.2 149.6,129.1 178.4,161.2 207.3,155.3 236.2,72.0 265.1,37.7 294.0,131.0" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="160.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="170.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="173.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="145.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="129.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="161.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="155.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="72.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="131.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,166.6 62.9,156.8 91.8,174.5 120.7,160.0 149.6,169.0 178.4,183.4 207.3,183.8 236.2,176.4 265.1,174.4 294.0,186.0" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="166.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="156.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="174.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="160.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="169.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="183.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="183.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="176.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="174.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="186.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,160.6 62.9,170.0 91.8,173.2 120.7,145.2 149.6,129.1 178.4,161.2 207.3,155.3 236.2,72.0 265.1,37.7 294.0,131.0" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="160.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="170.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="173.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="145.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="129.1" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="161.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="155.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="72.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="131.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,167.1 62.9,161.7 91.8,163.1 120.7,168.2 149.6,171.1 178.4,180.9 207.3,179.6 236.2,174.4 265.1,160.8 294.0,177.6" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="167.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="161.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="163.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="168.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="171.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="180.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="179.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="174.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="160.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="177.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,166.6 62.9,156.8 91.8,174.5 120.7,159.7 149.6,169.4 178.4,182.8 207.3,184.4 236.2,176.2 265.1,174.7 294.0,186.1" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="166.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="156.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="174.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="159.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="169.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="182.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="184.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="176.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="174.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="186.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,161.6 62.9,167.5 91.8,172.7 120.7,172.5 149.6,174.4 178.4,183.0 207.3,175.1 236.2,178.2 265.1,171.7 294.0,175.1" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="161.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="167.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="172.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="172.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="174.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="183.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="175.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="178.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="171.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="175.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,175.0 62.9,165.8 91.8,172.7 120.7,167.9 149.6,172.6 178.4,180.4 207.3,179.2 236.2,180.5 265.1,179.6 294.0,173.7" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="175.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="165.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="172.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="167.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="172.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="180.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="179.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="180.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="179.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="173.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,164.2 62.9,157.1 91.8,164.4 120.7,169.6 149.6,173.0 178.4,178.7 207.3,177.7 236.2,182.3 265.1,178.0 294.0,177.9" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="164.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="157.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="164.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="169.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="173.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="178.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="177.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="182.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="178.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="177.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 1 &mdash; linear2 (amber) vs. table20 (blue).</p>
 </div>
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 2, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 2, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 2</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -1965,34 +2275,78 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">6.2&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">139&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">346&#176;</text>
-<polyline points="34.0,185.0 62.9,135.8 91.8,95.2 120.7,45.2 149.6,37.7 178.4,61.0 207.3,124.0 236.2,198.0 265.1,202.5 294.0,204.2" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="185.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="135.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="95.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="45.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="61.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="124.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="198.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="202.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="204.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,205.5 62.9,206.1 91.8,208.2 120.7,201.6 149.6,205.0 178.4,208.3 207.3,210.2 236.2,210.9 265.1,209.6 294.0,201.4" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="205.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="206.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="208.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="201.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="205.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="208.3" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="210.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="210.9" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="209.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="201.4" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,185.0 62.9,135.8 91.8,95.2 120.7,45.3 149.6,37.7 178.4,61.0 207.3,124.0 236.2,198.1 265.1,202.4 294.0,204.2" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="185.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="135.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="95.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="45.3" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="61.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="124.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="198.1" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="202.4" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="204.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,205.8 62.9,202.7 91.8,203.0 120.7,202.4 149.6,206.3 178.4,205.1 207.3,207.1 236.2,210.7 265.1,211.5 294.0,211.5" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="205.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="202.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="203.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="202.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="206.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="205.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="207.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="210.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="211.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="211.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,205.4 62.9,205.9 91.8,208.3 120.7,201.6 149.6,204.9 178.4,208.4 207.3,210.2 236.2,210.9 265.1,209.5 294.0,201.4" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="205.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="205.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="208.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="201.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="204.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="208.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="210.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="210.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="209.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="201.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,212.4 62.9,209.2 91.8,205.6 120.7,204.9 149.6,206.7 178.4,207.6 207.3,211.4 236.2,211.3 265.1,210.7 294.0,205.1" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="212.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="209.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="205.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="204.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="206.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="207.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="211.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="211.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="210.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="205.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,207.6 62.9,210.3 91.8,204.9 120.7,205.5 149.6,206.8 178.4,206.5 207.3,211.2 236.2,211.1 265.1,210.0 294.0,201.5" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="207.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="210.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="204.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="205.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="206.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="206.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="211.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="211.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="210.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="201.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,210.8 62.9,207.5 91.8,204.0 120.7,205.0 149.6,206.9 178.4,207.6 207.3,209.5 236.2,211.6 265.1,211.3 294.0,205.6" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="210.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="207.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="204.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="205.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="206.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="207.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="209.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="211.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="211.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="205.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 2 &mdash; linear2 (amber) vs. table20 (blue).</p>
 </div>
 <div class="subplot">
-<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 3, comparing the naive linear model to a 20-point table">
+<svg viewBox="0 0 300 250" role="img" aria-label="Mean absolute error by target angle decile for MG90D unit 3, all six models">
 <text x="34" y="10" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--text)" text-anchor="start">Unit 3</text>
 <line x1="34" y1="222.0" x2="294" y2="222.0" stroke="var(--border)" stroke-width="1"/>
 <text x="29" y="225.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">0.0&#176;</text>
@@ -2002,28 +2356,72 @@ Mean |error| binned into ten deciles across this unit's own commanded-angle rang
 <text x="29" y="13.0" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="end">4.1&#176;</text>
 <text x="34.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">158&#176;</text>
 <text x="294.0" y="236" font-family="var(--font-mono)" font-size="8.5" fill="var(--text-faint)" text-anchor="middle">345&#176;</text>
-<polyline points="34.0,156.7 62.9,156.6 91.8,191.7 120.7,105.5 149.6,81.0 178.4,37.7 207.3,45.8 236.2,100.2 265.1,136.6 294.0,173.2" fill="none" stroke="var(--series-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="156.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="62.9" cy="156.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="91.8" cy="191.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="120.7" cy="105.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="149.6" cy="81.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="178.4" cy="37.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="207.3" cy="45.8" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="236.2" cy="100.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="265.1" cy="136.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<circle cx="294.0" cy="173.2" r="2.25" fill="var(--bg-raised)" stroke="var(--series-2)" stroke-width="1.5"/>
-<polyline points="34.0,185.6 62.9,183.5 91.8,179.0 120.7,185.6 149.6,193.1 178.4,188.6 207.3,190.7 236.2,193.1 265.1,191.6 294.0,196.0" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="34.0" cy="185.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="62.9" cy="183.5" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="91.8" cy="179.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="120.7" cy="185.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="149.6" cy="193.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="178.4" cy="188.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="207.3" cy="190.7" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="236.2" cy="193.1" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="265.1" cy="191.6" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
-<circle cx="294.0" cy="196.0" r="2.25" fill="var(--bg-raised)" stroke="var(--series-1)" stroke-width="1.5"/>
+<polyline points="34.0,156.8 62.9,156.5 91.8,191.7 120.7,105.5 149.6,81.0 178.4,37.7 207.3,46.0 236.2,99.5 265.1,136.6 294.0,173.2" fill="none" stroke="var(--model-linear2)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="156.8" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="62.9" cy="156.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="91.8" cy="191.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="120.7" cy="105.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="149.6" cy="81.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="178.4" cy="37.7" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="207.3" cy="46.0" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="236.2" cy="99.5" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="265.1" cy="136.6" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<circle cx="294.0" cy="173.2" r="2.75" fill="var(--bg-raised)" stroke="var(--model-linear2)" stroke-width="1.5"/>
+<polyline points="34.0,203.4 62.9,197.5 91.8,192.7 120.7,180.6 149.6,191.7 178.4,188.6 207.3,188.5 236.2,176.2 265.1,195.3 294.0,208.6" fill="none" stroke="var(--model-table10)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="203.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="62.9" cy="197.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="91.8" cy="192.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="120.7" cy="180.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="149.6" cy="191.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="178.4" cy="188.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="236.2" cy="176.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="265.1" cy="195.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<circle cx="294.0" cy="208.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table10)" stroke-width="1.5"/>
+<polyline points="34.0,185.6 62.9,183.5 91.8,179.0 120.7,185.6 149.6,193.1 178.4,188.6 207.3,190.7 236.2,193.1 265.1,191.6 294.0,195.9" fill="none" stroke="var(--model-table20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="185.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="62.9" cy="183.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="91.8" cy="179.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="120.7" cy="185.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="149.6" cy="193.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="178.4" cy="188.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="207.3" cy="190.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="236.2" cy="193.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="265.1" cy="191.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<circle cx="294.0" cy="195.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table20)" stroke-width="1.5"/>
+<polyline points="34.0,189.4 62.9,190.7 91.8,190.8 120.7,181.1 149.6,188.6 178.4,186.7 207.3,189.2 236.2,189.2 265.1,199.5 294.0,204.4" fill="none" stroke="var(--model-table30)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="189.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="62.9" cy="190.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="91.8" cy="190.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="120.7" cy="181.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="149.6" cy="188.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="178.4" cy="186.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="207.3" cy="189.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="236.2" cy="189.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="265.1" cy="199.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<circle cx="294.0" cy="204.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table30)" stroke-width="1.5"/>
+<polyline points="34.0,184.7 62.9,182.8 91.8,184.4 120.7,186.0 149.6,190.5 178.4,189.4 207.3,189.2 236.2,190.7 265.1,195.3 294.0,194.9" fill="none" stroke="var(--model-table40)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="184.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="62.9" cy="182.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="91.8" cy="184.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="120.7" cy="186.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="149.6" cy="190.5" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="178.4" cy="189.4" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="207.3" cy="189.2" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="236.2" cy="190.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="265.1" cy="195.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<circle cx="294.0" cy="194.9" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table40)" stroke-width="1.5"/>
+<polyline points="34.0,190.6 62.9,188.8 91.8,185.3 120.7,184.1 149.6,190.6 178.4,189.7 207.3,188.6 236.2,194.8 265.1,194.0 294.0,200.7" fill="none" stroke="var(--model-table50)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="34.0" cy="190.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="62.9" cy="188.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="91.8" cy="185.3" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="120.7" cy="184.1" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="149.6" cy="190.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="178.4" cy="189.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="207.3" cy="188.6" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="236.2" cy="194.8" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="265.1" cy="194.0" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
+<circle cx="294.0" cy="200.7" r="1.75" fill="var(--bg-raised)" stroke="var(--model-table50)" stroke-width="1.5"/>
 <line x1="34" y1="222" x2="294" y2="222" stroke="var(--border-strong)" stroke-width="1.25"/>
 </svg>
 <p class="subplot-caption">Unit 3 &mdash; linear2 (amber) vs. table20 (blue).</p>
