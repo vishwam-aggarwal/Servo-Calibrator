@@ -15,9 +15,9 @@
     --text-muted:  #7a7d82;
     --border:      rgba(20,23,26,0.10);
     --border-2:    rgba(20,23,26,0.18);
-    --down:        #2a78d6;   /* setpoint / "square" mode */
-    --up:          #eb6834;   /* actual / "step" mode / linear model */
-    --ref:         #1baf7a;   /* error / "sine" mode / table model */
+    --down:        #2a78d6;   /* setpoint / linear model */
+    --up:          #eb6834;   /* actual */
+    --ref:         #1baf7a;   /* table model */
     --grid:        #e4e3de;
     --axis:        #c7c6c0;
     --good:        #0ca30c;
@@ -104,7 +104,6 @@
   .pill.status-warn   { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
   .pill.status-crit   { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); }
   .pill.status-info   { background: color-mix(in srgb, var(--down) 18%, transparent); color: var(--down); }
-  .pill.status-accent { background: color-mix(in srgb, var(--ref) 18%, transparent); color: var(--ref); }
   .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
   .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 10px; }
@@ -131,27 +130,12 @@
   button.full { width: 100%; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  label.filebtn {
-    display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600;
-    padding: 7px 14px; border-radius: 4px; border: 1px solid var(--border-2);
-    background: var(--surface-2); color: var(--text-1); cursor: pointer;
-  }
-  label.filebtn input { display: none; }
-  label.filebtn.disabled { opacity: 0.4; pointer-events: none; }
-
-  /* ---- Tabs (Step / Square / Sine) ---- */
-  .tab-row { display: flex; gap: 4px; background: var(--surface-2); border-radius: 5px; padding: 3px; }
-  .tab-btn {
-    flex: 1; background: transparent; border: none; padding: 6px 8px;
-    font-size: 11.5px; font-weight: 650; color: var(--text-muted); border-radius: 4px; cursor: pointer;
-  }
-  .tab-btn.active { background: var(--surface); color: var(--text-1); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
-  .tab-panel { display: none; flex-direction: column; gap: 10px; }
-  .tab-panel.active { display: flex; }
 
   .model-row { display: flex; flex-direction: column; gap: 5px; }
   .model-label { font-size: 10.5px; font-weight: 600; color: var(--text-2); }
   .model-label .hint { font-weight: 400; text-transform: none; letter-spacing: normal; }
+  .tab-row { display: flex; gap: 4px; background: var(--surface-2); border-radius: 5px; padding: 3px; }
+  .model-btn { flex: 1; background: transparent; border: none; padding: 6px 8px; font-size: 11.5px; font-weight: 650; color: var(--text-muted); border-radius: 4px; cursor: pointer; }
   .model-btn.active { background: color-mix(in srgb, var(--m-color) 20%, var(--surface)); color: var(--m-color); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m-color) 45%, transparent); }
 
   .readout-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
@@ -193,7 +177,8 @@
       lookup table, fully automated, on-device &mdash; no installation wizard, no direction/logical-zero setup
       (always physical <code class="mono">[0, maxAngle]</code>, just like the table itself). Building an actual
       driver constructor from the result is left to your own UMI application code. Once calibrated, drive/visualize
-      trajectories against it live, and export/import the table to skip recalibrating a servo you've already measured.
+      a move against it live. This firmware doesn't remember a calibration across a reconnect &mdash; recalibrate
+      fresh each session (no GETTABLE/IMPORT on this companion).
     </p>
   </header>
 
@@ -218,15 +203,14 @@
           <span class="pill status-off" id="pill-cal"><span class="pill-dot"></span><span id="pill-cal-text">Not calibrated</span></span>
         </div>
         <div class="card-desc">
-          Stall-scans outward from center in both directions to find the real safe pulse range (no hand-measuring),
-          then sweeps it twice to build a direction-averaged 20-point table. Takes 1&ndash;3 minutes; progress
-          streams into the log above.
+          Stall-scans outward from center in both directions to find the real safe pulse range (no hand-measuring,
+          with active recovery if the servo spins past a limit instead of stalling), then sweeps it twice to build
+          a direction-averaged 20-point table. Usually finishes in under a minute; progress streams into the log above.
         </div>
         <button class="primary full" id="btn-calibrate">Calibrate</button>
         <div class="cal-summary" id="cal-summary">&mdash;</div>
         <div class="btn-row">
           <button id="btn-export" disabled>Export table&hellip;</button>
-          <label class="filebtn" id="btn-import-label"><input type="file" id="file-import" accept="application/json" />Import table&hellip;</label>
         </div>
       </section>
 
@@ -239,83 +223,28 @@
         <div class="model-row">
           <span class="model-label">Calibration model <span class="hint">&mdash; switches live, mid-motion, without touching the setpoint</span></span>
           <div class="tab-row">
-            <button class="tab-btn model-btn" id="model-btn-linear" data-model="LINEAR" style="--m-color: var(--up)">Linear (2-pt)</button>
-            <button class="tab-btn model-btn" id="model-btn-table" data-model="TABLE" style="--m-color: var(--ref)">Table (20-pt)</button>
+            <button class="model-btn" id="model-btn-linear" data-model="LINEAR" style="--m-color: var(--up)">Linear (2-pt)</button>
+            <button class="model-btn" id="model-btn-table" data-model="TABLE" style="--m-color: var(--ref)">Table (20-pt)</button>
           </div>
         </div>
 
-        <div class="tab-row">
-          <button class="tab-btn active" id="tab-btn-step" data-tab="step">Step</button>
-          <button class="tab-btn" id="tab-btn-square" data-tab="square">Square</button>
-          <button class="tab-btn" id="tab-btn-sine" data-tab="sine">Sine</button>
-        </div>
-
-        <div class="tab-panel active" id="tab-panel-step">
-          <div class="form-grid">
-            <div class="field">
-              <label for="in-target">Target (deg)</label>
-              <input type="number" id="in-target" step="0.1" value="90" />
-            </div>
-            <div class="field">
-              <label for="in-vmax">v<sub>max</sub> (deg/s)</label>
-              <input type="number" id="in-vmax" step="1" min="0.1" value="60" />
-            </div>
-            <div class="field">
-              <label for="in-amax">a<sub>max</sub> (deg/s&sup2;)</label>
-              <input type="number" id="in-amax" step="1" min="0.1" value="120" />
-            </div>
-            <div class="field"><span class="hint" id="target-hint">connect and calibrate first</span></div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="in-target">Target (deg)</label>
+            <input type="number" id="in-target" step="0.1" value="90" />
           </div>
-          <button class="primary full" id="btn-go">Go</button>
-        </div>
-
-        <div class="tab-panel" id="tab-panel-square">
-          <div class="form-grid">
-            <div class="field">
-              <label for="in-sq-low">Low (deg)</label>
-              <input type="number" id="in-sq-low" step="0.1" value="40" />
-            </div>
-            <div class="field">
-              <label for="in-sq-high">High (deg)</label>
-              <input type="number" id="in-sq-high" step="0.1" value="150" />
-            </div>
-            <div class="field">
-              <label for="in-sq-period">Period (s)</label>
-              <input type="number" id="in-sq-period" step="0.1" min="0.1" max="60" value="3" />
-            </div>
-            <div class="field">
-              <label for="in-sq-vmax">v<sub>max</sub> (deg/s)</label>
-              <input type="number" id="in-sq-vmax" step="1" min="0.1" value="60" />
-            </div>
-            <div class="field">
-              <label for="in-sq-amax">a<sub>max</sub> (deg/s&sup2;)</label>
-              <input type="number" id="in-sq-amax" step="1" min="0.1" value="120" />
-            </div>
-            <div class="field"><span class="hint">Toggles low&harr;high every period/2s. Every edge is a real TrapezoidalProfile move.</span></div>
+          <div class="field">
+            <label for="in-vmax">v<sub>max</sub> (deg/s)</label>
+            <input type="number" id="in-vmax" step="1" min="0.1" value="60" />
           </div>
-          <button class="primary full" id="btn-square">Start square wave</button>
-        </div>
-
-        <div class="tab-panel" id="tab-panel-sine">
-          <div class="form-grid">
-            <div class="field">
-              <label for="in-sin-center">Center (deg)</label>
-              <input type="number" id="in-sin-center" step="0.1" value="90" />
-            </div>
-            <div class="field">
-              <label for="in-sin-amp">Amplitude (deg)</label>
-              <input type="number" id="in-sin-amp" step="0.1" min="0.1" value="30" />
-            </div>
-            <div class="field">
-              <label for="in-sin-freq">Frequency (Hz)</label>
-              <input type="number" id="in-sin-freq" step="0.1" min="0.01" max="5" value="0.5" />
-            </div>
-            <div class="field"><span class="hint" id="sine-hint">Center&plusmn;amplitude must fit in range. No v/a limit -- amplitude&times;2&pi;&times;freq is the effective peak speed. Eases in with one normal move to center first.</span></div>
+          <div class="field">
+            <label for="in-amax">a<sub>max</sub> (deg/s&sup2;)</label>
+            <input type="number" id="in-amax" step="1" min="0.1" value="120" />
           </div>
-          <button class="primary full" id="btn-sine">Start sine wave</button>
+          <div class="field"><span class="hint" id="target-hint">connect and calibrate first</span></div>
         </div>
-
-        <button class="danger full" id="btn-stop">Stop</button>
+        <button class="primary full" id="btn-go">Go</button>
+        <button class="danger full" id="btn-stop">Abort</button>
 
         <div class="readout-row">
           <div class="readout"><span class="readout-label">Setpoint</span><span class="readout-value" id="ro-setpoint" style="color:var(--down)">&mdash;</span></div>
@@ -346,8 +275,8 @@
             <div class="chart-title-row">
               <span class="chart-title">Velocity (deg/s)</span>
               <span class="legend">
-                <span class="item"><span class="swatch" style="background:var(--down)"></span>setpoint</span>
-                <span class="item"><span class="swatch" style="background:var(--up)"></span>actual (differentiated)</span>
+                <span class="item"><span class="swatch" style="background:var(--down)"></span>setpoint (planned)</span>
+                <span class="item"><span class="swatch" style="background:var(--up)"></span>actual (measured)</span>
               </span>
             </div>
             <div class="chart-wrap" id="wrap-vel"></div>
@@ -376,6 +305,33 @@
 
 /* ============================================================
    Serial link
+
+   Wire protocol for this companion (ServoCalibrator_Companion, the FSM
+   redesign -- see that .ino's own header comment) is a different shape
+   from the older companion this page used to talk to:
+     - "#"-prefixed lines are boot/log noise, same as before.
+     - "TELEM <ms> <targetCentideg> <targetVelCentidegPerSec>
+       <actualCentideg> <actualVelCentidegPerSec>" streams every tick,
+       unconditionally -- the direct replacement for the old "T,..."
+       telemetry line, just a different shape/unit (centidegrees, and no
+       mode/model field -- see the app code below for how those are now
+       tracked client-side instead).
+     - "<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <rawPos>"
+       and "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <rawPos>"
+       stream during calibration -- genuinely new categories this
+       protocol didn't have before, since CALIBRATE used to be a single
+       blocking call with one final reply. These are NOT replies to any
+       pending command -- see onProgress/onTable below.
+     - "<elapsedMs> ERR <code> <rawPos>" is an asynchronous internal
+       failure (e.g. a calibration settle timing out) -- also not tied
+       to whichever command happens to be pending at that moment.
+     - A line starting literally with "OK "/"ERR " (no leading number)
+       is a genuine synchronous reply to whichever command was just sent.
+   The one thing that hasn't changed: a naive "read one line, assume
+   it's the reply" pattern breaks the moment TELEM starts streaming
+   continuously -- confirmed the hard way while testing the firmware
+   itself (see CLAUDE.md). This classifier exists specifically so
+   sendCommand()'s queue only ever receives genuine replies.
    ============================================================ */
 class SerialLink {
   constructor() {
@@ -387,6 +343,9 @@ class SerialLink {
     this.lineWaiters = [];
     this.onLog = null;
     this.onTelemetry = null;
+    this.onProgress = null;
+    this.onTable = null;
+    this.onAsyncError = null;
   }
 
   async connect() {
@@ -418,7 +377,23 @@ class SerialLink {
 
   _onLine(line) {
     if (line.startsWith("#")) { this.onLog && this.onLog(line); return; }
-    if (line.startsWith("T,")) { this.onTelemetry && this.onTelemetry(line); return; }
+    if (line.startsWith("TELEM ")) { this.onTelemetry && this.onTelemetry(line); return; }
+
+    // A streamed async event is "<number> <TAG> ...", never a plain
+    // reply -- direct command replies from handleLine() are always
+    // printed bare ("OK ..."/"ERR ..." starting at position 0, no
+    // elapsed-time prefix), so checking the SECOND token first is what
+    // tells these apart, not just looking at position 0.
+    const sp = line.indexOf(" ");
+    if (sp > 0 && !isNaN(line.slice(0, sp))) {
+      const rest = line.slice(sp + 1);
+      const sp2 = rest.indexOf(" ");
+      const tag = sp2 >= 0 ? rest.slice(0, sp2) : rest;
+      if (tag === "PROGRESS") { this.onProgress && this.onProgress(line); return; }
+      if (tag === "TABLE") { this.onTable && this.onTable(line); return; }
+      if (tag === "ERR") { this.onAsyncError && this.onAsyncError(line); return; }
+    }
+
     this.onLog && this.onLog("< " + line);
     if (this.lineWaiters.length > 0) this.lineWaiters.shift()(line);
     else this.lineQueue.push(line);
@@ -495,70 +470,53 @@ function waitForReadyBanner(timeoutMs = 6000) {
 }
 
 /* ============================================================
-   Tabs
-   ============================================================ */
-const TABS = ["step", "square", "sine"];
-function showTab(name) {
-  TABS.forEach(t => {
-    el(`tab-btn-${t}`).classList.toggle("active", t === name);
-    el(`tab-panel-${t}`).classList.toggle("active", t === name);
-  });
-}
-TABS.forEach(t => el(`tab-btn-${t}`).onclick = () => showTab(t));
+   Busy-lock. commandBusy guards a single in-flight synchronous
+   round-trip (unchanged reasoning from before: two overlapping
+   sendCommand() calls can get their replies crossed once the device is
+   streaming continuously, exactly the bug this app's own test scripts
+   hit while the firmware was being verified -- see CLAUDE.md).
 
-/* ============================================================
-   Command busy-lock. The firmware is a blocking, single-threaded
-   executor for long-running commands (CALIBRATE takes 1-3 minutes;
-   IMPORT's physical re-anchor can legitimately take 20+ seconds on a
-   servo that needs a big rampTo() from wherever it currently is). The
-   device doesn't reject an overlapping command sent while one is still
-   in flight -- it just queues the bytes, and once both replies
-   eventually arrive, whichever sendCommand() call happens to be
-   waiting first consumes whichever reply arrives first. Once that
-   pairing slips by even one command, every reply after it is
-   misdelivered to the wrong caller until reconnecting.
-   Real bug hit in practice: IMPORT's own client-side timeout used to
-   be shorter than its worst-case re-anchor time, so a still-in-progress
-   IMPORT got wrongly treated as failed, the UI let more commands
-   through immediately after, and every reply from then on landed on
-   the wrong command (GO showed an IMPORT error, etc). Locking every
-   command button while one request is in flight prevents the overlap
-   structurally, rather than just tuning one timeout value that could
-   still be wrong for some future case.
+   calRunning/moveRunning are new: CAL and GO both ack almost instantly
+   now ("OK CAL"/"OK GO") and then run asynchronously in the background,
+   signaled by the ongoing TABLE/PROGRESS/TELEM stream rather than a
+   single blocking reply -- so "a calibration is in progress" is no
+   longer the same thing as "a command is in flight" the way the old
+   firmware's blocking CALIBRATE made it. Both disable the same buttons
+   commandBusy does (the firmware would reject them anyway with
+   ERR BUSY), but deliberately leave Abort enabled -- ABORT is exempt
+   from the firmware's own busy-gate specifically so it can cancel an
+   in-progress calibration, not just a move.
    ============================================================ */
 let commandBusy = false;
-const BUSY_LOCK_IDS = ["btn-calibrate", "btn-go", "btn-square", "btn-sine", "btn-stop", "model-btn-linear", "model-btn-table"];
-function setBusy(isBusy) {
-  commandBusy = isBusy;
-  BUSY_LOCK_IDS.forEach(id => { el(id).disabled = isBusy; });
-  el("btn-import-label").classList.toggle("disabled", isBusy);
+let calRunning = false;
+let moveRunning = false;
+const BUSY_LOCK_IDS = ["btn-calibrate", "btn-go", "model-btn-linear", "model-btn-table", "btn-export"];
+function updateBusyUI() {
+  const busy = commandBusy || calRunning || moveRunning;
+  BUSY_LOCK_IDS.forEach(id => { el(id).disabled = busy; });
+  el("btn-stop").disabled = !link.port;
 }
-// Every serial command that expects a reply should go through this,
-// not link.sendCommand() directly -- see the comment above.
+// Every serial command that expects a synchronous reply should go
+// through this, not link.sendCommand() directly.
 async function sendGuarded(cmd, timeoutMs = 3000) {
   if (commandBusy) throw new Error("Still waiting on a previous command to finish -- try again in a moment.");
-  setBusy(true);
+  commandBusy = true;
+  updateBusyUI();
   try {
     return await link.sendCommand(cmd, timeoutMs);
   } finally {
-    setBusy(false);
+    commandBusy = false;
+    updateBusyUI();
   }
 }
 
 /* ============================================================
    Calibration model toggle (Linear 2-pt vs. Table 20-pt) -- switches
-   live via MODEL, independent of which Step/Square/Sine tab is showing
-   and without touching the current setpoint/motion at all.
+   live via MODEL, independent of the current move and without touching
+   setpoint/motion. currentModel is tracked purely client-side (TELEM
+   carries no model field -- the old firmware's telemetry did, this one
+   doesn't) since only this app ever changes it.
    ============================================================ */
-["LINEAR", "TABLE"].forEach(m => {
-  el(`model-btn-${m.toLowerCase()}`).onclick = async () => {
-    try {
-      requireConnected();
-      const resp = await sendGuarded(`MODEL ${m}`);
-      if (!resp.startsWith("OK")) throw new Error("MODEL rejected: " + resp);
-    } catch (e) { appendLog("# " + e.message); }
-  };
-});
 let currentModel = null;
 function setModelButtons(model) {
   if (model === currentModel) return;
@@ -566,29 +524,33 @@ function setModelButtons(model) {
   el("model-btn-linear").classList.toggle("active", model === "LINEAR");
   el("model-btn-table").classList.toggle("active", model === "TABLE");
 }
+["LINEAR", "TABLE"].forEach(m => {
+  el(`model-btn-${m.toLowerCase()}`).onclick = async () => {
+    try {
+      requireConnected();
+      const resp = await sendGuarded(`MODEL ${m}`);
+      if (!resp.startsWith("OK")) throw new Error("MODEL rejected: " + resp);
+      setModelButtons(m);
+    } catch (e) { appendLog("# " + e.message); }
+  };
+});
 
 /* ============================================================
-   Calibration: run / export / import. Wire format for CALRESULT and
-   IMPORT is deliberately identical (maxAngleDeg minPulseUs maxPulseUs
-   <pulse cdeg>x20), so a saved export can be replayed as an IMPORT verbatim.
+   Calibration: CAL acknowledges immediately, then runs asynchronously
+   -- completion is detected from the TABLE stream itself (see below),
+   since this firmware has no CALRESULT-style final reply and no
+   GETTABLE to recover a table after the fact (recalibrate every
+   session). calTable's angleCentideg values are raw encoder readings
+   relative to wherever the board booted -- NOT re-anchored so the
+   low-pulse endpoint reads 0 the way the old firmware's table was (see
+   the .ino's own header comment) -- so this app has to do that framing
+   itself: rawToDisplayDeg()/displayDegToRawCentideg() below.
    ============================================================ */
-let calibration = null; // { maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}] }
-let maxAngleDeg = null;
+const CAL_TABLE_POINTS = 20; // must match the firmware's own #define
 
-function parseCalResult(line) {
-  const parts = line.trim().split(/\s+/);
-  if (parts[0] !== "CALRESULT") throw new Error("Unexpected reply: " + line);
-  const result = { maxAngleDeg: parseFloat(parts[1]), minPulseUs: parseInt(parts[2], 10), maxPulseUs: parseInt(parts[3], 10), points: [] };
-  for (let i = 4; i < parts.length; i += 2) {
-    result.points.push({ pulseUs: parseInt(parts[i], 10), angleCentideg: parseInt(parts[i + 1], 10) });
-  }
-  return result;
-}
-function buildImportCommand(cal) {
-  const parts = ["IMPORT", cal.maxAngleDeg, cal.minPulseUs, cal.maxPulseUs];
-  for (const p of cal.points) parts.push(p.pulseUs, p.angleCentideg);
-  return parts.join(" ");
-}
+let calibration = null; // { maxAngleDeg, minPulseUs, maxPulseUs, offsetCentideg, sign, points }
+let rawTableEntries = null;
+let prevTableIdx = null;
 
 function setCalPill(state) {
   const pill = el("pill-cal"), text = el("pill-cal-text");
@@ -597,31 +559,118 @@ function setCalPill(state) {
   else { pill.className = "pill status-off"; text.textContent = "Not calibrated"; }
 }
 
+// Raw firmware angleCentideg <-> UI-facing degrees, anchored so the
+// low-pulse endpoint reads 0 and the range ascends toward maxAngleDeg
+// (this project's established "physical frame" convention) regardless
+// of which physical direction happened to read as increasing on the
+// AS5600 for this particular mounting.
+function rawToDisplayDeg(rawCentideg) {
+  if (!calibration) return rawCentideg / 100;
+  return calibration.sign * (rawCentideg - calibration.offsetCentideg) / 100;
+}
+function rawVelToDisplayDegPerSec(rawCentidegPerSec) {
+  const sign = calibration ? calibration.sign : 1;
+  return sign * rawCentidegPerSec / 100;
+}
+function displayDegToRawCentideg(deg) {
+  if (!calibration) return Math.round(deg * 100);
+  return Math.round(calibration.sign * deg * 100 + calibration.offsetCentideg);
+}
+
 function applyCalibration(cal) {
   calibration = cal;
-  maxAngleDeg = cal.maxAngleDeg;
   el("cal-summary").textContent =
     `${cal.minPulseUs}–${cal.maxPulseUs}µs · ${cal.maxAngleDeg.toFixed(2)}° stroke · ${cal.points.length}-point table`;
   setCalPill("done");
   el("btn-export").disabled = false;
 
-  el("target-hint").textContent = `0 .. ${maxAngleDeg.toFixed(2)}`;
-  el("in-target").max = maxAngleDeg; el("in-target").min = 0;
+  el("target-hint").textContent = `0 .. ${cal.maxAngleDeg.toFixed(2)}`;
+  el("in-target").max = cal.maxAngleDeg; el("in-target").min = 0;
   el("card-controls").classList.remove("disabled");
   el("card-charts").classList.remove("disabled");
+  updateBusyUI();
 }
+
+function finishCalibration() {
+  calRunning = false;
+  if (rawTableEntries.some(e => e === null)) {
+    appendLog("# calibration stream ended without all " + CAL_TABLE_POINTS + " table points -- not applying");
+    setCalPill(calibration ? "done" : "idle");
+    updateBusyUI();
+    return;
+  }
+  const offsetCentideg = rawTableEntries[0].angleCentideg;
+  const spanCentideg = rawTableEntries[CAL_TABLE_POINTS - 1].angleCentideg - offsetCentideg;
+  const sign = spanCentideg < 0 ? -1 : 1;
+  const points = rawTableEntries.map(e => ({
+    pulseUs: e.pulseUs,
+    angleCentideg: sign * (e.angleCentideg - offsetCentideg),
+  }));
+  applyCalibration({
+    maxAngleDeg: points[CAL_TABLE_POINTS - 1].angleCentideg / 100,
+    minPulseUs: points[0].pulseUs,
+    maxPulseUs: points[CAL_TABLE_POINTS - 1].pulseUs,
+    offsetCentideg, sign, points,
+  });
+  appendLog("# calibration complete");
+}
+
+link.onTable = (line) => {
+  if (!calRunning) return;
+  // "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <rawPos>"
+  const p = line.trim().split(/\s+/);
+  const idx = parseInt(p[2], 10);
+  const pulseUs = parseInt(p[3], 10);
+  const angleCentideg = parseInt(p[4], 10);
+  if (!isFinite(idx) || !isFinite(pulseUs) || !isFinite(angleCentideg) || idx < 0 || idx >= CAL_TABLE_POINTS) return;
+  rawTableEntries[idx] = { pulseUs, angleCentideg };
+  // The table is built down-pass then up-pass (see the .ino) -- every
+  // index is visited twice, but the LAST (up-pass) visit to the final
+  // index is unambiguous: idx===19 immediately after idx===18, i.e. the
+  // up-pass just finished ascending through the whole table.
+  const justFinished = (idx === CAL_TABLE_POINTS - 1 && prevTableIdx === CAL_TABLE_POINTS - 2);
+  prevTableIdx = idx;
+  if (justFinished) finishCalibration();
+};
+
+link.onAsyncError = (line) => {
+  appendLog("# " + line);
+  if (calRunning) {
+    calRunning = false;
+    setCalPill(calibration ? "done" : "idle");
+    appendLog("# calibration failed");
+  }
+  if (moveRunning) {
+    moveRunning = false;
+    appendLog("# move failed");
+  }
+  updateBusyUI();
+};
+
+link.onProgress = (line) => {
+  // "<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <rawPos>" --
+  // the one place a completed GO move signals itself: STATE_TRAJ_WAIT
+  // prints exactly one PROGRESS line, right as it settles, before
+  // handing off to STATE_TRAJ_DONE (see the .ino's own comment).
+  const p = line.trim().split(/\s+/);
+  const state = p[2];
+  if (moveRunning && state === "TRAJ_WAIT") {
+    moveRunning = false;
+    updateBusyUI();
+  }
+};
 
 el("btn-calibrate").onclick = async () => {
   try {
     requireConnected();
+    const resp = await sendGuarded("CAL");
+    if (!resp.startsWith("OK")) throw new Error("CAL rejected: " + resp);
+    rawTableEntries = new Array(CAL_TABLE_POINTS).fill(null);
+    prevTableIdx = null;
+    calRunning = true;
     setCalPill("running");
-    const resp = await sendGuarded("CALIBRATE", 240000);
-    if (!resp.startsWith("CALRESULT")) throw new Error("Calibration failed: " + resp);
-    applyCalibration(parseCalResult(resp));
-  } catch (e) {
-    appendLog("# " + e.message);
-    setCalPill(calibration ? "done" : "idle");
-  }
+    updateBusyUI();
+  } catch (e) { appendLog("# " + e.message); }
 };
 
 el("btn-export").onclick = () => {
@@ -632,34 +681,6 @@ el("btn-export").onclick = () => {
   a.download = `servo_calibration_${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
-};
-
-el("file-import").onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    requireConnected();
-    const cal = JSON.parse(await file.text());
-    if (!isFinite(cal.maxAngleDeg) || !isFinite(cal.minPulseUs) || !isFinite(cal.maxPulseUs) ||
-        !Array.isArray(cal.points) || cal.points.length !== 20) {
-      throw new Error("Malformed calibration file (expected maxAngleDeg/minPulseUs/maxPulseUs + 20 points).");
-    }
-    setCalPill("running");
-    // 90s, not 15s -- IMPORT's re-anchor does up to 3 rampTo() moves,
-    // and a ramp from wherever the servo currently sits to minPulseUs
-    // can legitimately take 20+ seconds on its own if that's most of
-    // the servo's range. A timeout shorter than the real worst case is
-    // exactly what caused the cascading command-desync bug this whole
-    // busy-lock exists to prevent -- see the comment above sendGuarded().
-    const resp = await sendGuarded(buildImportCommand(cal), 90000);
-    if (!resp.startsWith("OK")) throw new Error("Import rejected: " + resp);
-    applyCalibration(cal);
-  } catch (err) {
-    appendLog("# import failed: " + err.message);
-    setCalPill(calibration ? "done" : "idle");
-  } finally {
-    e.target.value = "";
-  }
 };
 
 /* ============================================================
@@ -675,12 +696,14 @@ function setConnectedUI(isConnected) {
   if (!isConnected) {
     el("card-controls").classList.add("disabled");
     el("card-charts").classList.add("disabled");
-    calibration = null; maxAngleDeg = null;
+    calibration = null;
+    calRunning = false; moveRunning = false; commandBusy = false;
     setCalPill("idle");
     el("btn-export").disabled = true;
     el("cal-summary").textContent = "—";
     samples = []; t0ms = null;
   }
+  updateBusyUI();
 }
 
 el("btn-connect").onclick = async () => {
@@ -689,34 +712,27 @@ el("btn-connect").onclick = async () => {
     setConnectedUI(true);
     appendLog("# connected, waiting for board...");
     const gotReady = await waitForReadyBanner();
-    if (!gotReady) appendLog("# (no ready banner seen in time -- board may already be running; try Calibrate/Import anyway)");
+    if (!gotReady) appendLog("# (no ready banner seen in time -- board may already be running; try Calibrate anyway)");
 
     // Discard anything that arrived during the boot/reset window before
     // this point -- e.g. a garbled byte or two from the USB-serial
     // adapter resyncing right as opening the port resets the board via
-    // DTR. Nothing legitimate can be sitting in the reply queue this
-    // early (no command has been sent yet this session), so anything
-    // here is noise. Real bug hit without this: a boot-garbled line
-    // that didn't start with a clean "#" fell through as if it were a
-    // reply, got queued, and silently became GETTABLE's "answer" below
-    // -- which pushed GETTABLE's real reply onto the queue instead,
-    // which then got consumed by the next real command (IMPORT) as ITS
-    // reply, misdelivering everything after by one slot. The device had
-    // genuinely imported successfully; the UI just never found out.
+    // DTR (confirmed still happening on real hardware while this
+    // firmware was tested -- see CLAUDE.md). Nothing legitimate can be
+    // sitting in the reply queue this early, so anything here is noise.
     if (link.lineQueue.length > 0) {
       appendLog(`# discarding ${link.lineQueue.length} stray line(s) from the boot window`);
       link.lineQueue = [];
     }
 
-    // Best-effort recovery of a calibration already on the board (e.g.
-    // reconnecting after a page reload, board itself never reset).
+    // Basic liveness check -- best-effort, doesn't block the rest of
+    // the connect flow. There's no GETTABLE-equivalent to recover an
+    // existing calibration the way the old firmware allowed; every
+    // session starts uncalibrated.
     try {
-      const resp = await sendGuarded("GETTABLE", 3000);
-      if (resp.startsWith("CALRESULT")) {
-        applyCalibration(parseCalResult(resp));
-        appendLog("# recovered existing calibration from the board");
-      }
-    } catch (e) { /* not calibrated yet -- fine */ }
+      const resp = await sendGuarded("PING", 2000);
+      if (!resp.startsWith("OK")) appendLog("# unexpected PING reply: " + resp);
+    } catch (e) { appendLog("# PING failed: " + e.message); }
   } catch (e) {
     appendLog("# connect failed: " + e.message);
   }
@@ -732,46 +748,47 @@ el("btn-disconnect").onclick = async () => {
 el("btn-go").onclick = async () => {
   try {
     requireConnected();
+    if (!calibration) throw new Error("Not calibrated yet.");
     const target = parseFloat(el("in-target").value);
     const vmax = parseFloat(el("in-vmax").value);
     const amax = parseFloat(el("in-amax").value);
     if (![target, vmax, amax].every(isFinite)) throw new Error("Fill in target/vmax/amax.");
-    const resp = await sendGuarded(`GO ${target} ${vmax} ${amax}`);
+    // The firmware itself doesn't range-check POS (unlike the old
+    // companion's GO) -- enforce the physical range client-side instead.
+    if (target < 0 || target > calibration.maxAngleDeg) {
+      throw new Error(`Target must be 0..${calibration.maxAngleDeg.toFixed(2)}`);
+    }
+    if (vmax <= 0 || amax <= 0) throw new Error("v_max/a_max must be positive.");
+
+    let resp = await sendGuarded(`ACCEL ${amax}`);
+    if (!resp.startsWith("OK")) throw new Error("ACCEL rejected: " + resp);
+    resp = await sendGuarded(`VEL ${vmax}`);
+    if (!resp.startsWith("OK")) throw new Error("VEL rejected: " + resp);
+    const rawTargetDeg = (displayDegToRawCentideg(target) / 100).toFixed(2);
+    resp = await sendGuarded(`POS ${rawTargetDeg}`);
+    if (!resp.startsWith("OK")) throw new Error("POS rejected: " + resp);
+    resp = await sendGuarded("GO");
     if (!resp.startsWith("OK")) throw new Error("GO rejected: " + resp);
+
+    moveRunning = true;
+    updateBusyUI();
   } catch (e) { appendLog("# " + e.message); }
 };
 
-el("btn-square").onclick = async () => {
-  try {
-    requireConnected();
-    const lo = parseFloat(el("in-sq-low").value);
-    const hi = parseFloat(el("in-sq-high").value);
-    const period = parseFloat(el("in-sq-period").value);
-    const vmax = parseFloat(el("in-sq-vmax").value);
-    const amax = parseFloat(el("in-sq-amax").value);
-    if (![lo, hi, period, vmax, amax].every(isFinite)) throw new Error("Fill in all square-wave fields.");
-    const resp = await sendGuarded(`SQUARE ${lo} ${hi} ${period} ${vmax} ${amax}`);
-    if (!resp.startsWith("OK")) throw new Error("SQUARE rejected: " + resp);
-  } catch (e) { appendLog("# " + e.message); }
-};
-
-el("btn-sine").onclick = async () => {
-  try {
-    requireConnected();
-    const center = parseFloat(el("in-sin-center").value);
-    const amp = parseFloat(el("in-sin-amp").value);
-    const freq = parseFloat(el("in-sin-freq").value);
-    if (![center, amp, freq].every(isFinite)) throw new Error("Fill in all sine-wave fields.");
-    const resp = await sendGuarded(`SINE ${center} ${amp} ${freq}`);
-    if (!resp.startsWith("OK")) throw new Error("SINE rejected: " + resp);
-  } catch (e) { appendLog("# " + e.message); }
-};
-
+// Bypasses sendGuarded()'s single-flight lock deliberately -- ABORT is
+// exempt from the firmware's own busy-gate too (see the .ino), so it
+// shouldn't ever be blocked behind whatever this app's own commandBusy
+// happens to be doing at the moment the user clicks it.
 el("btn-stop").onclick = async () => {
   try {
     requireConnected();
-    const resp = await sendGuarded("STOP");
-    if (!resp.startsWith("OK")) throw new Error("STOP failed: " + resp);
+    const resp = await link.sendCommand("ABORT");
+    if (resp.startsWith("OK")) appendLog("# aborted");
+    else if (resp.includes("ALREADY_IDLE")) appendLog("# nothing was running");
+    else throw new Error("ABORT failed: " + resp);
+    calRunning = false; moveRunning = false;
+    setCalPill(calibration ? "done" : "idle");
+    updateBusyUI();
   } catch (e) { appendLog("# " + e.message); }
 };
 
@@ -781,45 +798,42 @@ el("btn-stop").onclick = async () => {
    ============================================================ */
 const WINDOW_SEC = 8;
 const BUFFER_SEC = 15;
-let samples = []; // { t (s), setpointDeg, setpointVel, actualDeg, mode, model }
+let samples = []; // { t (s), setpointDeg, setpointVel, actualDeg, actualVel, model }
 let t0ms = null;
 
 const MODE_PILL = {
-  IDLE:   { cls: "status-off",    text: "Idle" },
-  MOVE:   { cls: "status-warn",   text: "Step" },
-  SQUARE: { cls: "status-info",   text: "Square" },
-  SINE:   { cls: "status-accent", text: "Sine" },
+  idle:   { cls: "status-off",  text: "Idle" },
+  moving: { cls: "status-warn", text: "Moving" },
 };
-let currentMode = "IDLE";
-function setModePill(mode) {
-  if (mode === currentMode) return;
-  currentMode = mode;
-  const info = MODE_PILL[mode] || MODE_PILL.IDLE;
+let currentModePill = null;
+function setModePill(moving) {
+  const key = moving ? "moving" : "idle";
+  if (key === currentModePill) return;
+  currentModePill = key;
+  const info = MODE_PILL[key];
   el("pill-mode").className = "pill " + info.cls;
   el("pill-mode-text").textContent = info.text;
 }
 
 link.onTelemetry = (line) => {
-  // T,<t_ms>,<setpoint_deg>,<setpoint_vel_degs>,<actual_deg>,<mode>,<model>
-  const parts = line.split(",");
-  if (parts.length !== 7) return;
+  // TELEM <ms> <targetCentideg> <targetVelCentidegPerSec> <actualCentideg> <actualVelCentidegPerSec>
+  const parts = line.split(/\s+/);
+  if (parts.length !== 6) return;
   const tMs = parseInt(parts[1], 10);
-  const setpointDeg = parseFloat(parts[2]);
-  const setpointVel = parseFloat(parts[3]);
-  const actualDeg = parseFloat(parts[4]);
-  const mode = parts[5];
-  const model = parts[6];
-  if (![tMs, setpointDeg, setpointVel, actualDeg].every(isFinite)) return;
+  const setpointDeg = rawToDisplayDeg(parseInt(parts[2], 10));
+  const setpointVel = rawVelToDisplayDegPerSec(parseInt(parts[3], 10));
+  const actualDeg = rawToDisplayDeg(parseInt(parts[4], 10));
+  const actualVel = rawVelToDisplayDegPerSec(parseInt(parts[5], 10));
+  if (![tMs, setpointDeg, setpointVel, actualDeg, actualVel].every(isFinite)) return;
 
   if (t0ms === null) t0ms = tMs;
   const t = (tMs - t0ms) / 1000.0;
 
-  samples.push({ t, setpointDeg, setpointVel, actualDeg, mode, model });
+  samples.push({ t, setpointDeg, setpointVel, actualDeg, actualVel, model: currentModel });
   const cutoff = t - BUFFER_SEC;
   while (samples.length > 0 && samples[0].t < cutoff) samples.shift();
 
-  setModePill(mode);
-  setModelButtons(model);
+  setModePill(moveRunning);
 };
 
 /* ============================================================
@@ -895,19 +909,6 @@ function drawRollingChart(container, series, xMax, opts) {
   container.appendChild(svg);
 }
 
-function computeActualVelocities(visible) {
-  const raw = [];
-  for (let i = 1; i < visible.length; i++) {
-    const dt = visible[i].t - visible[i - 1].t;
-    raw.push(dt > 1e-4 ? (visible[i].actualDeg - visible[i - 1].actualDeg) / dt : 0);
-  }
-  return raw.map((_, i) => {
-    const lo = Math.max(0, i - 2);
-    const win = raw.slice(lo, i + 1);
-    return win.reduce((a, b) => a + b, 0) / win.length;
-  });
-}
-
 const MODEL_COLOR = { LINEAR: "var(--up)", TABLE: "var(--ref)" };
 function splitErrorByModel(visible) {
   const segments = [];
@@ -928,9 +929,10 @@ function splitErrorByModel(visible) {
 function updateModelStats(visible) {
   const stats = {};
   for (const s of visible) {
+    if (!s.model) continue;
     const err = Math.abs(s.actualDeg - s.setpointDeg);
     (stats[s.model] || (stats[s.model] = { sum: 0, n: 0 })).sum += err;
-    if (stats[s.model].n !== undefined) stats[s.model].n++;
+    stats[s.model].n++;
   }
   const parts = [];
   if (stats.LINEAR) parts.push(`<span style="color:var(--up)">linear ${(stats.LINEAR.sum / stats.LINEAR.n).toFixed(2)}&deg; avg (n=${stats.LINEAR.n})</span>`);
@@ -955,10 +957,9 @@ function renderFrame() {
     { points: visible.map(s => ({ x: s.t, y: s.actualDeg })), color: "var(--up)" },
   ], tNow, { yUnit: "°", minSpan: 5 });
 
-  const actualVel = computeActualVelocities(visible);
   drawRollingChart(el("wrap-vel"), [
     { points: visible.map(s => ({ x: s.t, y: s.setpointVel })), color: "var(--down)" },
-    { points: visible.slice(1).map((s, i) => ({ x: s.t, y: actualVel[i] })), color: "var(--up)" },
+    { points: visible.map(s => ({ x: s.t, y: s.actualVel })), color: "var(--up)" },
   ], tNow, { yUnit: "°/s", minSpan: 5 });
 
   drawRollingChart(el("wrap-err"), splitErrorByModel(visible), tNow, { yUnit: "°", symmetric: true, minSpan: 1, zeroLine: true });

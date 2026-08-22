@@ -12,16 +12,21 @@ output shaft as ground truth, one self-contained HTML file talking
 no build step:
 
 - **`ServoCalibrator.html` + `ServoCalibrator_Companion/`** — one button
-  (`CALIBRATE`) stall-scans a servo's real mechanical pulse range and
-  builds a direction-averaged 20-point calibration lookup table, fully
-  automated, on-device. Once calibrated, the same page drives/visualizes
-  live trajectories against that table — a step, a continuous
-  post-trajectory square wave, or a continuous trajectory-free sine wave
-  — with three auto-scaled rolling charts (position/velocity/error) and
-  a live toggle between the 2-point linear formula and the 20-point
-  table, so the table's accuracy win is visible interactively. Table
-  import/export (JSON) lets you skip recalibrating a servo you've
-  already measured.
+  (`CAL`) stall-scans a servo's real mechanical pulse range (with active
+  spin-recovery so it can safely push closer to a servo's true physical
+  limits than a purely reactive timeout can) and builds a
+  direction-averaged 20-point calibration lookup table, fully automated,
+  on-device, as a self-contained FSM (`ServoCalibrator_Companion.ino`,
+  one `switch`/`case` in `loop()`, fixed 50Hz tick). Once calibrated, the
+  same page drives/visualizes a single point-to-point trajectory move
+  against that table — no continuous square-wave/sine-wave generator, by
+  design (see the 2026-08-21 entries below) — with three auto-scaled
+  rolling charts (position/velocity/error) and a live toggle between the
+  2-point linear formula and the 20-point table, so the table's accuracy
+  win is visible interactively. No table import, and no recovery of a
+  prior calibration across a reconnect — this firmware recalibrates
+  fresh every session (see the 2026-08-21 entry on why); export-only JSON
+  download is available for reference.
 
 **Purely for characterization, not installation.** No direction test, no
 horn-install step, no logical zero shift — always the servo's own
@@ -37,15 +42,6 @@ see the README's dependency table). Grew out of `Servo_Auto_Calibrator`
 (a hand-built, single-servo characterization project) — its raw CSVs are
 archived in [`historical-data/`](historical-data/); see that folder's
 own README for what they are.
-
-**`ServoAutoCalibrator/`** — a separate, standalone on-device firmware
-(no host script, no browser page): the same coarse+fine stall-scan
-range-finding concept as `ServoCalibrator_Companion`/`ServoDAQ`,
-reimplemented as a self-contained FSM (`ServoAutoCalibrator.ino`,
-one `switch`/`case` in `loop()`, fixed 50Hz tick) with active
-spin-recovery so it can safely push closer to a servo's true physical
-limits than a purely reactive timeout can. See its own dated section
-below.
 
 ## History: merged from two separate tools (2026-08-09)
 
@@ -1004,11 +1000,106 @@ table entries, `GO` accepted, and the servo genuinely moved (a real
 **Forward-looking lesson for the still-unbuilt host page**: it cannot
 use a naive "read one line, assume it's the reply" pattern once
 `TELEM` is streaming continuously — it needs the same kind of
-request/reply-vs-telemetry line classification `ServoCalibrator.html`'s
-own `SerialLink` already implements (recognize `OK`/`ERR` lines as
-command replies, route everything else to a telemetry handler),
-learned here by hitting the exact bug in a test harness before ever
-writing the real client.
+request/reply-vs-telemetry line classification the old tool's own
+`SerialLink` implemented for its own (simpler) protocol, learned here by
+hitting the exact bug in a test harness before ever writing the real
+client. (Done — see the next entry.)
+
+## The FSM firmware becomes THE companion; ServoCalibrator.html rewritten to match (2026-08-21)
+
+Per explicit direction ("this is what I want to be the final" version of
+this tool), closed the remaining gap from the entry above: the FSM
+firmware now *is* `ServoCalibrator_Companion/ServoCalibrator_Companion.ino`
+(moved there via `git mv`, replacing the older, structurally different
+companion firmware that used to live at that path — still recoverable
+from git history, not deleted from the project's memory, just retired
+from the working tree), and `ServoCalibrator.html` was rewritten against
+it rather than built fresh, reusing its proven layout/CSS/chart code and
+busy-lock design. The old `ServoAutoCalibrator/` folder is gone; the
+`.ino`'s own header comment now explains the lineage for anyone who
+finds it confusing later.
+
+**Real protocol differences the rewrite had to design around** — this
+firmware's command set is genuinely not a superset of the old one's:
+
+- **No SQUARE/SINE** (confirmed already absent, not newly removed — see
+  the previous entry) — the Command card lost its Step/Square/Sine tabs
+  entirely, down to one panel.
+- **No GETTABLE/IMPORT/EXPORT-round-trip.** This firmware has no way to
+  query an existing table or accept a pushed-in one — every session
+  starts uncalibrated, no reconnect-recovery possible. Kept a
+  download-only "Export table…" (client-side JSON dump of whatever this
+  session measured, for reference) since it costs nothing to keep, but
+  removed "Import table…" outright since there's no command to send it to.
+- **CAL acknowledges immediately and runs asynchronously**, unlike the
+  old firmware's single blocking `CALIBRATE` call that returned one
+  final `CALRESULT` reply. There is no dedicated "calibration finished"
+  message at all. Solved without touching the firmware again: the app
+  watches the `TABLE` line stream itself and recognizes completion
+  unambiguously the moment index 19 arrives *ascending* (i.e. right after
+  index 18, on the up-pass) — the table is built down-pass then up-pass,
+  so this exact transition can only mean the up-pass just finished. An
+  async `ERR` line (not tied to any pending command) signals failure the
+  same way.
+- **`calTable`'s `angleCentideg` values aren't re-anchored to 0.** The
+  old firmware explicitly reframed its table so the low-pulse endpoint
+  always read exactly 0°; this one reports raw encoder angles relative to
+  wherever the board happened to boot — could even be negative, and the
+  sign of (max endpoint − min endpoint) depends on physical mounting
+  orientation, not guaranteed positive. The app now does this
+  normalization itself (`rawToDisplayDeg()`/`displayDegToRawCentideg()`
+  in `ServoCalibrator.html`) so the UI still presents the established
+  "physical frame `[0, maxAngleDeg]`" convention regardless — computed
+  once when a `CAL` run's table finishes (offset = index 0's raw angle,
+  sign = whichever direction makes the span positive), applied to every
+  `POS` sent and every `TELEM` value displayed afterward.
+- **`GO` split into `ACCEL`/`VEL`/`POS` + a bare `GO`**, not one combined
+  call — the button now sends three preliminary commands before the
+  actual `GO`, each through the same guarded single-flight round trip.
+- **`POS` has no server-side range check** (the old firmware's `GO`
+  rejected out-of-range targets; this one just accepts whatever
+  `targetPositionDeg` it's given). Added a client-side bounds check
+  against `0..maxAngleDeg` to keep the same safety net.
+- **`ABORT` replaces `STOP`**, and is broader — it can cancel an
+  in-progress calibration too, not just a move (and is exempt from the
+  firmware's own busy-gate for exactly that reason). The button (kept
+  labeled "Abort") now bypasses the app's own single-flight guard too, so
+  it's never blocked behind whatever `ACCEL`/`VEL`/`POS`/`GO` round trip
+  happens to be mid-flight when clicked.
+- **`TELEM`'s wire shape is entirely different**: space-separated
+  centidegrees instead of the old comma-separated degrees line, no
+  mode/model field at all (tracked client-side instead, since only the
+  app itself ever changes `MODEL`), and — a genuine improvement over the
+  old design — actual velocity comes straight from the firmware
+  (`encoderDerivative`) rather than being differentiated client-side from
+  noisy position samples.
+- **A brand-new line category the old protocol never had**: `PROGRESS`
+  and `TABLE` lines stream during calibration (and one `PROGRESS
+  TRAJ_WAIT` line signals a move's completion) — none of these are
+  replies to any pending command, so `SerialLink._onLine()` was rewritten
+  with a real classifier (numeric-first-token + a recognized tag word)
+  instead of the old two-way `#`/`T,` split, specifically to avoid the
+  exact reply-misdelivery bug this project's own test scripts hit while
+  verifying the firmware (see the entry above).
+
+**Verified against the real running page code, not a reimplementation**:
+loaded the actual file in a real browser (`claude-in-chrome`) and fed
+`SerialLink._onLine()`/`onTable()`/`onProgress()`/`onAsyncError()` the
+*exact* lines a real board produced during today's hardware testing (all
+40 real `TABLE` entries from a clean run, real `TELEM`/`OK`/`ERR`
+sequences) — confirmed the angle-frame normalization matches hand
+calculations exactly (offset `21339`, span `23717` centideg → `237.17°`,
+index 0 correctly reads `0°`), calibration-completion detection fires on
+the real ascending-19 transition, a simulated `GO` correctly resolves a
+target of `100°` in exactly `100°` out through the raw↔display transform,
+move-completion clears on a real `PROGRESS TRAJ_WAIT` line, an async
+`ERR CAL_TIMEOUT` correctly reverts the UI without discarding an
+already-successful calibration, `ABORT`'s `ERR ALREADY_IDLE` is handled
+as informational rather than a failure, and both charts render real SVG
+paths from the resulting data with no console errors. Not yet verified:
+an actual live `navigator.serial` session against real hardware (the
+browser's native port-picker can't be scripted) — that still needs a
+human at the keyboard.
 
 ## Requirements & dependencies
 
