@@ -3,6 +3,15 @@
 This file provides guidance to Claude Code (claude.ai/code) when working
 with code in this repository.
 
+**Before writing or editing anything under `website/`** (`article.md`,
+`data.md`, `tool.md`, `app.html`), read `website/STYLE_GUIDE.md` first —
+it's the canonical visual/content style guide shared across every repo
+that feeds vishwamaggarwal.com (frontmatter schemas, the two intentional
+layout widths, color tokens, chart-SVG conventions, the
+blank-line-inside-raw-HTML gotcha). Canonical copy lives at
+`vishwamaggarwal.com`'s own `STYLE_GUIDE.md`; if this repo's copy is ever
+suspected stale, diff against that one.
+
 ## What this is
 
 One companion-firmware + Web Serial browser-app pair for characterizing
@@ -1438,3 +1447,14 @@ Per a new site-wide convention (decided from the website repo's side, applying t
 Also fixed a stale line in README's top Status blurb ("the firmware depends on two of my other libraries that aren't public yet") that the 2026-08-22 01:11 dependency-docs fix (see entry above) had missed — it only touched the Quick start/Requirements sections, not this one. Now says what's actually true: one public sibling dependency, no private access needed.
 
 Local Arduino sketchbook clone (`~/Documents/Arduino/Servo-Calibrator`) brought current with this restructuring via the same branch → commit/push → PR → merge → pull sequence as everything else in this repo.
+
+## website/STYLE_GUIDE.md added (2026-08-22)
+
+Copied from the website repo's canonical `STYLE_GUIDE.md`, prompted by
+the user wanting one consistent visual/content standard across every
+repo that feeds vishwamaggarwal.com. Audited this repo's `article.md`,
+`data.md`, and `tool.md` against it — already compliant (chart SVGs
+already used `var(--token)` colors and `role="img"`/`aria-label`, tool.md
+already left the tag row/status badge/buttons to the template) — no
+content changes needed, just the new file. See the website repo's own
+`CLAUDE.md` for the full reasoning.
