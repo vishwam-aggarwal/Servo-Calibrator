@@ -64,16 +64,35 @@ application code.
 
 ## Quick start
 
-1. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino`
+1. **Install the two libraries this firmware needs** — both are free,
+   no private access required (see
+   [Requirements & dependencies](#requirements--dependencies)):
+   - **`AS5600`** (RobTillaart's), via the Arduino IDE's own Library
+     Manager: `Sketch → Include Library → Manage Libraries…`, search
+     `AS5600`, install the one by RobTillaart. Or from the command line:
+     `arduino-cli lib install "AS5600"`.
+   - **[Universal-Trajectory-Interface](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface)**
+     — not in Library Manager's index (it's not a published Arduino
+     library, just a public GitHub repo), so install it manually:
+     download the repo as a ZIP from GitHub (`Code → Download ZIP`) and
+     use `Sketch → Include Library → Add .ZIP Library…`, pointing at
+     that ZIP — the IDE unpacks it into your sketchbook's `libraries/`
+     folder itself. (Equivalently: `git clone` it directly into your
+     Arduino `libraries/` folder, e.g.
+     `~/Documents/Arduino/libraries/Universal-Trajectory-Interface` — same
+     result, no rename needed since the repo already has a proper
+     `library.properties`.) Restart the IDE afterward if it was already
+     open, so it picks up the new library.
+2. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino`
    in the Arduino IDE (or `arduino-cli`) and upload it to your board.
    Servo signal is fixed at pin `A3` (change `SERVO_PIN` in the sketch if
    you need a different pin — unlike the firmware's predecessor, this
    isn't runtime-configurable, since there's no wizard step left to ask).
-2. **Wire it up**: servo signal to `A3`, AS5600 on the board's I²C bus
+3. **Wire it up**: servo signal to `A3`, AS5600 on the board's I²C bus
    (`SDA`/`SCL`), servo power from an external supply sized for your
    servo (not the Arduino's own 5V pin on most boards — see
    [Wiring](#wiring)).
-3. **Open the app.** `ServoCalibrator.html` needs to be served over
+4. **Open the app.** `ServoCalibrator.html` needs to be served over
    `http://` — Web Serial does not reliably work when a page is opened
    directly as a `file://` URL. The easiest way:
    ```bash
@@ -83,7 +102,7 @@ application code.
    ```
    then open `http://localhost:8000/ServoCalibrator.html` in **Chrome or
    Edge** (Web Serial isn't implemented in Firefox or Safari).
-4. **Connect, then Calibrate.** Click *Connect…*, pick your serial port
+5. **Connect, then Calibrate.** Click *Connect…*, pick your serial port
    in the browser's device picker, then click **Calibrate** — one
    button, fully automated, usually done in under a minute. The command
    acknowledges immediately and the run streams progress asynchronously;
@@ -152,10 +171,19 @@ Two pieces:
 ## The calibration table & Universal-Motor-Interface
 
 The table this tool builds is a plain array of `{pulseUs, angleCentideg}`
-pairs (`CalPoint`, from [Universal-Motor-Interface](https://github.com/vishwam-aggarwal/Universal-Motor-Interface)'s
-`ServoCalibrationTable.h`) — the same type `RCServoMotorDriver`/
-`PCA9685MotorDriver` accept as an optional constructor argument, falling
-back to the strict 2-point linear formula when omitted. Physical testing
+pairs (`CalPoint`) — the firmware's own self-contained type, **not**
+an include of [Universal-Motor-Interface](https://github.com/vishwam-aggarwal/Universal-Motor-Interface)'s
+`ServoCalibrationTable.h` (building/uploading this sketch needs no UMI
+access at all — see [Requirements & dependencies](#requirements--dependencies)).
+It's deliberately shaped like UMI's own `CalPoint` — same fields, same
+angle↔pulse interpolation algorithm — but not identical (`int32_t`
+angles here vs. UMI's `int16_t`, to handle this firmware's unbounded
+multi-turn position tracking) and lives entirely in `ServoCalibrator_Companion.ino`
+itself. The exported JSON's points are still meant to be pasted into a
+`PROGMEM` array and passed to `RCServoMotorDriver`'s/
+`PCA9685MotorDriver`'s table-accepting constructor overload by whatever
+*consuming* application installs this servo — that's where UMI actually
+comes in, downstream, not in building this tool. Physical testing
 across two servos (140 to 22,000+ samples, in the investigation that
 motivated this whole tool) found a 20-point table cuts mean positioning
 error 2–6× vs. the linear formula, for ~80 bytes of `PROGMEM`.
@@ -213,13 +241,18 @@ not for skipping a future physical recalibration of that same servo.
 | Library | Used for | Status |
 |---|---|---|
 | [RobTillaart's `AS5600`](https://github.com/RobTillaart/AS5600) | Low-level AS5600 I²C register access | Public — `arduino-cli lib install "AS5600"` or via Library Manager |
-| **Universal-Motor-Interface** (mine) | `ServoCalibrationTable.h`'s `CalPoint` type and angle↔pulse math — used **unconditionally**, called directly rather than through `RCServoMotorDriver` (which binds its table at construction, not at runtime) | **Not public yet** |
-| **Universal-Trajectory-Interface** (mine) | `TrapezoidalProfile` — used **unconditionally** | **Not public yet** |
+| [**Universal-Trajectory-Interface**](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface) (mine) | `TrapezoidalProfile` — used **unconditionally** | **Public** |
 
-In short: **the firmware as committed here won't compile for anyone
-without access to both Universal-Motor-Interface and
-Universal-Trajectory-Interface** — neither is optional, regardless of
-which trajectory mode you use.
+In short: anyone with these two libraries installed (see
+[Quick start](#quick-start)) can build and upload this firmware —
+**no private dependency remains**. `ServoCalibrator_Companion` does
+**not** depend on Universal-Motor-Interface, despite an earlier version
+of this doc claiming otherwise — its calibration-table code (`CalPoint`,
+angle↔pulse interpolation) is a self-contained reimplementation in the
+`.ino` itself, not an actual include of UMI's `ServoCalibrationTable.h`.
+See [The calibration table](#the-calibration-table--universal-motor-interface)
+below for where UMI *is* still relevant (downstream, for a consuming
+application), just not for building this sketch.
 
 **Browser:** Chrome or Edge (desktop) — Web Serial isn't available in
 Firefox or Safari.
