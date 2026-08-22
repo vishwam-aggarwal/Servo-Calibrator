@@ -1117,6 +1117,24 @@ reading one perfectly flat number. Also fixed a leftover boot-banner
 string still reading `"ServoAutoCalibrator booting..."` after the move
 above — the header comment got updated then, the runtime string didn't.
 
+**A second, cleaner follow-up the same day**: rather than keep trading
+off "smooth enough for the still-filtered uses" against "raw enough for
+a legible TELEM trace" via one shared knob, decoupled them entirely.
+`printTelemetry()` now reports the actual position from a new
+`rawAngleCentideg()` (straight off `totalCounts`, no averaging at all)
+instead of `currentAngleCentideg()` (`filteredPosition`-based) — per
+explicit direction that TELEM should show the real, unsmoothed signal.
+`filteredPosition` itself — still feeding the calibration table, a `GO`
+move's planned start, and the scan's own edge-detection, none of which
+this touches — got `CAL_POSITION_FILTER_SAMPLES` bumped back up slightly
+to `5` (100ms), since doing so no longer costs the live trace anything
+now that TELEM bypasses it completely. Verified on real hardware:
+`CAL` still completes cleanly (40/40 table points), `GO` still accepted,
+and the raw position trace during a real move shows genuine single-count
+jitter (a momentary `-9`/`+9` reversal right at the start of one run) a
+filtered signal would have smoothed away — the deltas settle into a
+smooth, steady ramp only once real motion dominates the noise floor.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
