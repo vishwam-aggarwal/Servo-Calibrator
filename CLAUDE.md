@@ -1101,6 +1101,22 @@ an actual live `navigator.serial` session against real hardware (the
 browser's native port-picker can't be scripted) — that still needs a
 human at the keyboard.
 
+**Follow-up same day**: `CAL_POSITION_FILTER_SAMPLES` (the M-sample
+running average `filteredPosition` is smoothed over) was `10` — 200ms
+at this 50Hz tick, enough to visibly blunt real short-timescale tracking
+error/lag in the live TELEM trace, not just AS5600 quantization noise.
+This isn't a cosmetic-only value: `filteredPosition` also feeds
+`recordTableEntry()` (the calibration table itself), `currentAngleDeg()`
+(a `GO` move's planned starting point), and `updateStepDelta()` (the
+calibration scan's own edge-detection) — not only what gets reported.
+Reduced to `3` (60ms) per direct feedback that the trace read too
+smooth; still knocks down single-sample spikes without hiding real
+motion. Verified on real hardware post-flash: idle position now visibly
+jitters between adjacent AS5600 counts (e.g. 1265/1274) instead of
+reading one perfectly flat number. Also fixed a leftover boot-banner
+string still reading `"ServoAutoCalibrator booting..."` after the move
+above — the header comment got updated then, the runtime string didn't.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`

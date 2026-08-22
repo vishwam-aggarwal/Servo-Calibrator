@@ -63,7 +63,13 @@
 #define CAL_SETTLE_TIMEOUT_MS 3000   // exit route 1 of every waiting state: give up if it never settles
 #define CAL_SETTLE_WINDOW_SAMPLES 10 // N -- how many recent raw readings the running average is over (to tune later)
 #define CAL_SETTLE_WINDOW_COUNTS 2   // max |current raw - running average| to call it settled (to tune later)
-#define CAL_POSITION_FILTER_SAMPLES 10   // M -- how many recent raw readings the reported "filtered position" is averaged over (to tune later)
+// M -- how many recent raw readings the reported "filtered position"
+// is averaged over. Was 10 (200ms at this 50Hz tick rate) -- reduced
+// per direct feedback that the live TELEM trace read too smooth,
+// visibly blunting real tracking error/lag rather than just knocking
+// down AS5600 quantization noise. 3 (60ms) still averages away
+// single-sample spikes without hiding real short-timescale motion.
+#define CAL_POSITION_FILTER_SAMPLES 3
 
 // STATE_CAL_DOWN_*/STATE_CAL_UP_* run both the coarse and fine passes --
 // same states, same edge-detection logic either way, just a different
@@ -1241,7 +1247,7 @@ void setup() {
   while (!Serial) {}
   delay(300);   // let the USB-serial adapter settle before printing
 
-  Serial.println(F("# ServoAutoCalibrator booting..."));
+  Serial.println(F("# ServoCalibrator_Companion booting..."));
 
   Wire.begin();
   Wire.setClock(400000);  // Fast-mode I2C -- keeps one read comfortably inside a tick
