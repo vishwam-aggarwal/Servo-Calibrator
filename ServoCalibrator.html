@@ -93,6 +93,8 @@
   .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .card-title { font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
   .card-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+  ul.card-desc { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+  ul.card-desc li { padding-left: 2px; }
 
   .pill {
     display: inline-flex; align-items: center; gap: 5px;
@@ -173,12 +175,8 @@
     <div class="eyebrow">Universal-Motor-Interface + Universal-Trajectory-Interface companion tool</div>
     <h1>Servo Calibrator</h1>
     <p class="subhead">
-      Purely for characterization: one button finds a servo's real pulse range and builds a 20-point calibration
-      lookup table, fully automated, on-device &mdash; no installation wizard, no direction/logical-zero setup
-      (always physical <code class="mono">[0, maxAngle]</code>, just like the table itself). Building an actual
-      driver constructor from the result is left to your own UMI application code. Once calibrated, drive/visualize
-      a move against it live. This firmware doesn't remember a calibration across a reconnect &mdash; recalibrate
-      fresh each session (no GETTABLE/IMPORT on this companion).
+      One button finds a servo's real pulse range and builds a 20-point calibration table, fully automated.
+      Once calibrated, drive and visualize a move against it live.
     </p>
   </header>
 
@@ -202,11 +200,12 @@
           <div class="card-title">Calibration</div>
           <span class="pill status-off" id="pill-cal"><span class="pill-dot"></span><span id="pill-cal-text">Not calibrated</span></span>
         </div>
-        <div class="card-desc">
-          Stall-scans outward from center in both directions to find the real safe pulse range (no hand-measuring,
-          with active recovery if the servo spins past a limit instead of stalling), then sweeps it twice to build
-          a direction-averaged 20-point table. Usually finishes in under a minute; progress streams into the log above.
-        </div>
+        <ul class="card-desc">
+          <li>Coarse-scans outward from center, both directions, to find the rough pulse limits &mdash; with active recovery if the servo spins past one instead of stalling.</li>
+          <li>Fine-scans back into each limit for a precise result.</li>
+          <li>Sweeps the confirmed range twice (down, then up) to build a direction-averaged 20-point table.</li>
+          <li>Usually finishes in under a minute; progress streams into the log above.</li>
+        </ul>
         <button class="primary full" id="btn-calibrate">Calibrate</button>
         <div class="cal-summary" id="cal-summary">&mdash;</div>
         <div class="btn-row">
@@ -221,7 +220,7 @@
         </div>
 
         <div class="model-row">
-          <span class="model-label">Calibration model <span class="hint">&mdash; switches live, mid-motion, without touching the setpoint</span></span>
+          <span class="model-label">Calibration model</span>
           <div class="tab-row">
             <button class="model-btn" id="model-btn-linear" data-model="LINEAR" style="--m-color: var(--up)">Linear (2-pt)</button>
             <button class="model-btn" id="model-btn-table" data-model="TABLE" style="--m-color: var(--ref)">Table (20-pt)</button>
@@ -511,11 +510,14 @@ async function sendGuarded(cmd, timeoutMs = 3000) {
 }
 
 /* ============================================================
-   Calibration model toggle (Linear 2-pt vs. Table 20-pt) -- switches
-   live via MODEL, independent of the current move and without touching
-   setpoint/motion. currentModel is tracked purely client-side (TELEM
-   carries no model field -- the old firmware's telemetry did, this one
-   doesn't) since only this app ever changes it.
+   Calibration model toggle (Linear 2-pt vs. Table 20-pt) via MODEL --
+   NOT switchable mid-move on this firmware: MODEL is rejected with
+   ERR BUSY the same as every other command while a move is actively
+   streaming (trajectoryRunning), so the button is disabled then too
+   (see BUSY_LOCK_IDS/updateBusyUI() below). Only switchable at rest.
+   currentModel is tracked purely client-side (TELEM carries no model
+   field -- the old firmware's telemetry did, this one doesn't) since
+   only this app ever changes it.
    ============================================================ */
 let currentModel = null;
 function setModelButtons(model) {
