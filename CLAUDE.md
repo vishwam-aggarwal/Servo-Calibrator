@@ -1343,6 +1343,33 @@ new-bootloader default — uploaded cleanly on the first try. Worth
 remembering if a future session hits the same `not in sync` failure on
 this board: try the plain FQBN before assuming a hardware fault.
 
+## The model toggle never showed the live default (2026-08-21)
+
+Real bug, caught from actual use: `GO` works from the moment a
+calibration finishes — the firmware's own `useTable` defaults `false`
+(LINEAR) at boot — but neither `Linear`/`Table` tab in the app ever
+lit up until the user happened to click one. `currentModel` starts
+`null` and `setModelButtons()` was only ever called from the two tab
+buttons' own click handlers, so the UI had no way to reflect a model
+it hadn't been told about, even though the firmware was already running
+it. Not a wrong default, a **silent** one.
+
+Fixed by calling `setModelButtons("LINEAR")` from `applyCalibration()` —
+right when a calibration finishes, the one moment this app can state the
+live model with certainty (every session boots fresh with `useTable ==
+false`, and opening the port always reboots the board, so there's no
+stale-state risk in asserting it here). Also clears the highlight
+(`setModelButtons(null)`) in `setConnectedUI(false)`'s disconnect path,
+so a stale selection from a previous board/session can't linger
+visually into a new one before it's re-established.
+
+Verified against the real running page code (`claude-in-chrome`, not a
+reimplementation), using the exact table captured during the `GETTABLE`
+verification above: before `applyCalibration()`, neither tab has the
+`active` class; immediately after, `Linear` does (`currentModel ===
+"LINEAR"`) and `Table` doesn't; after a simulated disconnect, both
+clear and `currentModel` returns to `null`.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
