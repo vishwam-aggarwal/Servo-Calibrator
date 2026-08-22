@@ -20,16 +20,16 @@ over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_AP
 
 > **Status:** the firmware is a self-contained FSM (`ServoCalibrator_Companion.ino`)
 > verified against real hardware, including a full calibrate → drive
-> round-trip. The app (`ServoCalibrator.html`) was rewritten against
+> round-trip. The app (`website/app.html`) was rewritten against
 > that firmware and verified against the real page code — real captured
 > hardware wire data fed straight into `SerialLink`, calibration
 > parsing, and the charts — but **not yet exercised through an actual
 > live `navigator.serial` session** (the browser's native port picker
 > needs a human at the keyboard; that pass is still open). See
 > [Known limitations](#known-limitations) for what's still rough. **The
-> firmware depends on two of my other libraries that aren't public
-> yet** — see [Dependencies](#requirements--dependencies) before you try
-> to build it.
+> firmware depends on one sibling library, Universal-Trajectory-Interface —
+> public, no private access needed** — see
+> [Dependencies](#requirements--dependencies) before you try to build it.
 
 ## Contents
 
@@ -92,15 +92,18 @@ application code.
    (`SDA`/`SCL`), servo power from an external supply sized for your
    servo (not the Arduino's own 5V pin on most boards — see
    [Wiring](#wiring)).
-4. **Open the app.** `ServoCalibrator.html` needs to be served over
+4. **Open the app.** `website/app.html` needs to be served over
    `http://` — Web Serial does not reliably work when a page is opened
-   directly as a `file://` URL. The easiest way:
+   directly as a `file://` URL. (A hosted copy is also planned at
+   [vishwamaggarwal.com/tools/servo-calibrator/](https://vishwamaggarwal.com/tools/servo-calibrator/),
+   once that page is out of draft — no local setup needed there.) The
+   easiest way to run it from this repo in the meantime:
    ```bash
-   # from the folder containing ServoCalibrator.html
+   # from website/
    python -m http.server 8000
    # or: npx serve
    ```
-   then open `http://localhost:8000/ServoCalibrator.html` in **Chrome or
+   then open `http://localhost:8000/app.html` in **Chrome or
    Edge** (Web Serial isn't implemented in Firefox or Safari).
 5. **Connect, then Calibrate.** Click *Connect…*, pick your serial port
    in the browser's device picker, then click **Calibrate** — one
@@ -160,7 +163,7 @@ Two pieces:
   telemetry that streams unconditionally every tick regardless of
   state — the app never paces the motion, it only sends target/limit
   commands and plots what comes back.
-- **`ServoCalibrator.html`** — the app. Connection, calibration
+- **`website/app.html`** — the app. Connection, calibration
   triggering/export, and the three live charts all live here; the
   firmware doesn't know anything about SVG or JSON. Because the
   firmware's own calibration table isn't re-anchored to a 0° low
