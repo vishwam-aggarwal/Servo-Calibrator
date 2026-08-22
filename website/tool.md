@@ -4,7 +4,7 @@ description: "A one-button browser tool that finds a hobby servo's real pulse ra
 tags: ["Web Serial", "Robotics", "Arduino"]
 status: active
 repo: "https://github.com/vishwam-aggarwal/Servo-Calibrator"
-draft: true
+draft: false
 ---
 
 Every hobby servo ships with the same assumption baked into every tutorial: pick a minimum pulse, a maximum pulse, draw a straight line between them. [It's quietly wrong](/articles/hobby-servo-calibration/) — the real pulse-to-angle curve bows away from that line, sometimes by several degrees. Servo Calibrator is the tool that measures your own servo's real curve instead of assuming one.
