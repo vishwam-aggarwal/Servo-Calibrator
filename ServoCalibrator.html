@@ -595,6 +595,13 @@ function applyCalibration(cal) {
   el("in-target").max = cal.maxAngleDeg; el("in-target").min = 0;
   el("card-controls").classList.remove("disabled");
   el("card-charts").classList.remove("disabled");
+  // The firmware's own useTable defaults false (LINEAR) on every boot --
+  // and opening the port always reboots it (see the .ino), so this is
+  // genuinely the live model right now, not a guess. Reflect that in the
+  // UI immediately rather than leaving both tabs unhighlighted until the
+  // user happens to click one -- GO already works against this default,
+  // the toggle just wasn't saying so.
+  setModelButtons("LINEAR");
   updateBusyUI();
 }
 
@@ -762,6 +769,7 @@ function setConnectedUI(isConnected) {
     calibration = null;
     calRunning = false; moveRunning = false; commandBusy = false;
     setCalPill("idle");
+    setModelButtons(null);   // no board connected -- neither tab is the live model right now
     el("btn-export").disabled = true;
     el("cal-summary").textContent = "—";
     samples = []; t0ms = null;
