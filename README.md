@@ -165,7 +165,8 @@ Two pieces:
   commands and plots what comes back.
 - **`website/app.html`** — the app. Connection, calibration
   triggering/export, and the three live charts all live here; the
-  firmware doesn't know anything about SVG or JSON. Because the
+  firmware doesn't know anything about SVG or the exported `.h` file's
+  format. Because the
   firmware's own calibration table isn't re-anchored to a 0° low
   endpoint (see [Serial protocol reference](#serial-protocol-reference)),
   the app does that framing itself, client-side, so the UI still
@@ -182,11 +183,12 @@ It's deliberately shaped like UMI's own `CalPoint` — same fields, same
 angle↔pulse interpolation algorithm — but not identical (`int32_t`
 angles here vs. UMI's `int16_t`, to handle this firmware's unbounded
 multi-turn position tracking) and lives entirely in `ServoCalibrator_Companion.ino`
-itself. The exported JSON's points are still meant to be pasted into a
-`PROGMEM` array and passed to `RCServoMotorDriver`'s/
-`PCA9685MotorDriver`'s table-accepting constructor overload by whatever
-*consuming* application installs this servo — that's where UMI actually
-comes in, downstream, not in building this tool. Physical testing
+itself. Export (see [below](#export)) generates a standalone `.h` file
+with a plain `CalPoint` struct and populated array in that exact shape,
+ready to hand straight to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s
+table-accepting constructor overload by whatever *consuming* application
+installs this servo — that's where UMI actually comes in, downstream,
+not in building this tool. Physical testing
 across two servos (140 to 22,000+ samples, in the investigation that
 motivated this whole tool) found a 20-point table cuts mean positioning
 error 2–6× vs. the linear formula, for ~80 bytes of `PROGMEM`.
@@ -195,21 +197,28 @@ error 2–6× vs. the linear formula, for ~80 bytes of `PROGMEM`.
 The old wizard-based version of this repo did (see git history) — this
 version doesn't, because direction, logical zero, and mounting offset are
 all *installation*-specific decisions this characterization-only tool has
-no way to know. Export the table (see [below](#export)), paste its
-points into a `PROGMEM` array in your own project, and pass it to
-`RCServoMotorDriver`'s/`PCA9685MotorDriver`'s table-accepting constructor
-overload alongside whatever direction/offset your actual installation
-needs.
+no way to know. Export the table (see [below](#export)) — it's already a
+ready-to-use `CalPoint` array, no manual transcription needed — and pass
+it to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s table-accepting
+constructor overload alongside whatever direction/offset your actual
+installation needs.
 
 ## Export
 
 **Export** queries the firmware for its current table (`GETTABLE`, a
 genuine on-demand round trip, not a reuse of whatever the app happened to
 capture live off the original `CAL` run's own `TABLE` stream) and
-downloads it as a small JSON file:
-`{maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}, …]}`
-(already re-anchored to the app's own `[0, maxAngleDeg]` framing — see
-[How it works](#how-it-works)). There's no matching **Import** — this
+downloads it as a standalone `.h` file: a plain
+`struct CalPoint { uint16_t pulseUs; int16_t angleCentideg; }` — matching
+UMI's own `ServoCalibrationTable.h` field-for-field, though the file
+itself never mentions UMI — plus a populated
+`static const CalPoint SERVO_CAL_TABLE[]` array, already re-anchored to
+the app's own `[0, maxAngleDeg]` framing (see
+[How it works](#how-it-works)). It's a plain RAM array, not `PROGMEM` —
+directly readable with no special macro whether or not the consuming
+code ever touches UMI; add `PROGMEM` yourself if you want it in flash
+instead (and read it back with `pgm_read_word()`, the way UMI's own
+drivers do). There's no matching **Import** — this
 firmware has no command that accepts a pushed-in table, unlike its
 predecessor. `GETTABLE` only ever answers for the *current* session,
 too: opening the port always reboots the board, wiping its table, so
