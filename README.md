@@ -100,14 +100,15 @@ application code.
 
 ## What it looks like in use
 
-- **Calibration**: click Calibrate. The firmware stall-scans outward from
-  center in both directions (a sliding-window net-delta check, not a
-  single-step one — a mechanism visibly slows before it actually stops,
-  and a naive check false-triggers on that creep) to find the real safe
-  pulse range, then sweeps that range twice (once each direction) to
-  build a 20-point direction-averaged table. Progress streams into the
-  log live. Result: a summary (`350–2630µs · 214.01° stroke · 20-point
-  table`) and an **Export table…** button.
+- **Calibration**: click Calibrate. The firmware coarse-then-fine scans
+  outward from center in both directions — each scan self-calibrates its
+  own baseline step rate from its first few real steps, then watches
+  every step after that for a weak, reversed, or oversized-jump response
+  *relative to that rate* (no fixed threshold) — to find the real safe
+  pulse range, then sweeps it twice (once each direction) to build a
+  20-point direction-averaged table. Progress streams into the log live.
+  Result: a summary (`350–2630µs · 214.01° stroke · 20-point table`) and
+  an **Export table…** button.
 - **Live trace**: command a single point-to-point move (a real,
   v<sub>max</sub>/a<sub>max</sub>-limited trapezoidal move to a target
   angle — no continuous square-wave/sine-wave generator; this firmware
@@ -171,15 +172,19 @@ needs.
 
 ## Export
 
-**Export** downloads the current calibration as a small JSON file:
+**Export** queries the firmware for its current table (`GETTABLE`, a
+genuine on-demand round trip, not a reuse of whatever the app happened to
+capture live off the original `CAL` run's own `TABLE` stream) and
+downloads it as a small JSON file:
 `{maxAngleDeg, minPulseUs, maxPulseUs, points: [{pulseUs, angleCentideg}, …]}`
 (already re-anchored to the app's own `[0, maxAngleDeg]` framing — see
 [How it works](#how-it-works)). There's no matching **Import** — this
 firmware has no command that accepts a pushed-in table, unlike its
-predecessor. Every session starts uncalibrated; re-run Calibrate each
-time you reconnect or reset the board. Export exists purely for keeping
-a record of what a servo measured at, not for skipping a future physical
-recalibration of that same servo.
+predecessor. `GETTABLE` only ever answers for the *current* session,
+too: opening the port always reboots the board, wiping its table, so
+every reconnect still needs a fresh Calibrate before Export works again.
+Export exists purely for keeping a record of what a servo measured at,
+not for skipping a future physical recalibration of that same servo.
 
 ## Wiring
 
@@ -256,6 +261,7 @@ story if you're diffing against an older version of this doc.
 | `POS <targetDeg>` | `OK POS` — **not range-checked server-side**; the app clamps client-side instead |
 | `GO` | `OK GO` \| `ERR NOT_CALIBRATED` — starts a move to the most recently set `POS`, at the most recent `ACCEL`/`VEL` |
 | `MODEL LINEAR\|TABLE` | `OK MODEL` \| `ERR NOT_CALIBRATED` |
+| `GETTABLE` | `OK GETTABLE` \| `ERR NOT_CALIBRATED` — streams all 20 `TABLE` lines first (see below), *then* replies; no immediate ack the way `CAL`/`GO` get one |
 
 While a calibration or move is running, every command except `ABORT` and
 `PING` is rejected with `ERR BUSY`.
@@ -279,6 +285,13 @@ firmware's table was; the app reframes it client-side (see
 [How it works](#how-it-works)). `ERR` here is an asynchronous internal
 failure (e.g. a settle timing out), not a synchronous command rejection.
 
+`GETTABLE` streams the identical `TABLE` line shape, once per index,
+ascending — one entry per tick, oldest first, no down/up-pass repeat
+this time (it's just replaying the already-built table, not measuring a
+fresh one). The app tells the two apart by whether a calibration is
+actually running, not by the line shape itself, since it's the same
+either way.
+
 Once calibrated, telemetry streams every tick (~50Hz), unconditionally,
 regardless of state:
 
@@ -300,21 +313,12 @@ the instant the shaft settles. Lines starting with `#` are informational
   reimplementation), but the `navigator.serial` port-picker itself needs
   a human at the keyboard to click through, and that pass hasn't
   happened yet.
-- **No calibration persists across a reconnect.** This firmware has no
-  `GETTABLE`-equivalent — recalibrate every session, even if the board
-  itself was never reset.
+- **No calibration persists across a reconnect.** `GETTABLE` can
+  re-query the current session's table (used by Export), but opening the
+  port always reboots the board — recalibrate every session regardless.
 - **No table import**, only export — there's no command this firmware
   accepts a pushed-in table through. Export is for record-keeping, not
   for skipping a future recalibration.
-- **The stall-scan's absolute pulse-width safety ceiling
-  (`ABS_FLOOR_US`/`ABS_CEIL_US`) is enforced only by `servo.attach()`'s
-  own silent PWM clamp**, not by an explicit "hit the bound → abort with
-  a clear error" check the way the predecessor firmware had. In practice
-  the scan's own stall/reversal/anomaly detection (plus active
-  spin-recovery) stops it well before this matters, but there's no
-  dedicated fail-safe error path left if those all somehow fail to
-  trigger — worth hardening if this firmware sees a servo class none of
-  this project's testing has hit yet.
 - Tested on Chrome/Edge over `http://localhost`; opening the app
   directly via `file://` has not been confirmed to work reliably with
   Web Serial.

@@ -34,13 +34,16 @@
   Real protocol differences from the old companion firmware that
   ServoCalibrator.html has to account for (see that file's own comments
   for how): CAL acknowledges immediately and streams progress
-  asynchronously rather than blocking on one final reply; there is no
-  GETTABLE/IMPORT/EXPORT equivalent at all (recalibrate fresh after every
-  reconnect); GO takes its target/limits from separate ACCEL/VEL/POS
-  commands rather than one combined call; and calTable's angleCentideg
-  values are raw encoder readings relative to wherever the board happened
-  to boot, NOT re-anchored so index 0 reads exactly 0 the way the old
-  firmware's table was.
+  asynchronously rather than blocking on one final reply; GETTABLE
+  re-streams the current session's already-built calTable on request but
+  there's still no way to recover one across a reconnect (opening the
+  port always reboots the board via DTR, wiping calTable, so a fresh CAL
+  is still required every session) and no IMPORT at all; GO takes its
+  target/limits from separate ACCEL/VEL/POS commands rather than one
+  combined call; and calTable's angleCentideg values are raw encoder
+  readings relative to wherever the board happened to boot, NOT
+  re-anchored so index 0 reads exactly 0 the way the old firmware's table
+  was.
 */
 
 #define LOOP_FREQUENCY_HZ 50    // fixed tick rate -- every timing constant below derives from this
@@ -71,7 +74,7 @@
 // value tunes the responsiveness of: the calibration table's own
 // angleCentideg values (recordTableEntry()), a GO move's planned
 // starting point (currentAngleDeg()), and the calibration scan's own
-// edge-detection (updateStepDelta()). Was 10 (200ms at this 50Hz tick),
+// edge-detection (judgeScanStep()). Was 10 (200ms at this 50Hz tick),
 // then 3 (60ms) once TELEM was still routing through it and read too
 // smooth; now that TELEM bypasses it entirely, bumped back up slightly
 // to 5 (100ms) -- a little more settling margin for the uses that still
@@ -87,42 +90,45 @@
 // re-scans slowly across just that margin for a precise result.
 #define CAL_COARSE_STEP_US 50            // coarse-pass step size (to tune later)
 #define CAL_FINE_STEP_US 5               // fine-pass step size (to tune later)
-#define CAL_FINE_MARGIN_US 100           // how far back (toward center) from the coarse edge the fine pass starts,
-                                          // and the most ground it can cover before its own safety cap kicks in
-                                          // (see CAL_FINE_SWEEP_STEPS below) -- the fine pass itself stops as soon
-                                          // as it finds the edge, same as coarse (to tune later)
+#define CAL_FINE_MARGIN_US 100           // how far back (toward center) from the reported coarse edge the fine
+                                          // pass starts (to tune later)
 
-// The coarse-sweep edge check compares SETTLED POSITIONS, one sample per
-// step, not a per-tick reading -- see updateStepDelta()'s own comment for
-// why. Its stall/reversal checks compare a raw per-step count (a step's
-// net displacement means the same thing regardless of how many ticks it
-// took to settle, so no LOOP_FREQUENCY_HZ-derived scaling is needed
-// there); its anomaly check compares a step *rate* instead (counts per
-// commanded microsecond) specifically so the same baseline stays valid
-// across a coarse<->fine step-size change -- see stepRateBuffer's own
-// comment.
-#define CAL_STEP_DELTA_WINDOW_SAMPLES 10 // how many recent step rates the "normal step" baseline is averaged over (to tune later)
-#define CAL_STEP_JUMP_WINDOW 3.0f        // how much LARGER than the baseline (counts/us) a step rate has to be
-                                          // before we call it an oversized jump -- one-directional on purpose, see
-                                          // updateStepDelta()'s own comment: real hardware showed a step being
-                                          // SMALLER than baseline (weakening) isn't a reliable "found the edge"
-                                          // signal on its own (500us measured rate ~0.34 against baseline ~1.4-1.5,
-                                          // diff ~1.1, yet the real hard stop wasn't until 450us); stepDeltaStall
-                                          // (absolute, separate) is what catches that. This is only for the other
-                                          // extreme -- a step moving much farther than normal (to tune further)
-#define CAL_STEP_STALL_COUNTS 2          // max |step delta| itself (absolute, no baseline needed) before we call it a stall (to tune later)
+// Edge-detection is a direct port of this project's own ServoDAQ host's
+// scan_until_weak() (servo_daq.py) -- coarse and fine only, the naive
+// comparison sweep that host script also has is a study-only baseline,
+// never part of this firmware. Each of the four scans (coarse-down,
+// fine-down, coarse-up, fine-up) self-calibrates its OWN fresh reference
+// rate from its own first CAL_REFERENCE_STEPS real steps -- NOT one
+// baseline shared across the whole run -- then watches every step after
+// that for one of three signatures, all purely RELATIVE to that scan's
+// own rate (no fixed absolute count/threshold):
+//   - weak: |delta| below CAL_WEAKENING_FRACTION of the reference rate
+//     -- the response is dying out, the edge is right here.
+//   - reversed: delta's sign disagrees with stepDirection, past the same
+//     weakening-fraction floor (so ordinary +-1-count jitter while
+//     genuinely stopped never counts) -- a digital servo's own internal
+//     stall-protection backing off, observed on real hardware always as
+//     a reversal, never a same-direction overshoot.
+//   - big jump: |delta| more than CAL_BIG_JUMP_MULTIPLE times the
+//     reference rate -- a real, same-direction settle, just far larger
+//     than incremental motion (the servo losing its mechanical
+//     reference and free-spinning, not gradually weakening or reversing).
+// See judgeScanStep() for the actual per-step logic.
+#define CAL_REFERENCE_STEPS 5        // steps used to self-calibrate each scan's own baseline rate before any judgment starts
+#define CAL_WEAKENING_FRACTION 0.35f // see "weak" above
+#define CAL_BIG_JUMP_MULTIPLE 3.0f   // see "big jump" above
 
-// Per explicit direction, the fine pass stops the moment it finds the
-// edge -- same stall/anomaly/reversed detection as coarse, at the same
-// sensitivity, just in CAL_FINE_STEP_US steps instead of
-// CAL_COARSE_STEP_US ones (see STATE_CAL_DOWN_WAIT/UP_WAIT's own
-// comments). CAL_FINE_SWEEP_STEPS -- how many fixed fine steps
-// CAL_FINE_MARGIN_US covers -- is only a hard safety cap now: if the
-// margin is fully walked without the edge ever triggering, stop anyway
-// rather than keep going past where the margin was supposed to end.
-// Integer division is exact here -- both operands are tuned together
-// (to tune later).
-#define CAL_FINE_SWEEP_STEPS (CAL_FINE_MARGIN_US / CAL_FINE_STEP_US)
+// How many good steps before the one that revealed weakness/reversal/a
+// big jump gets reported as the edge -- not necessarily the very last
+// good point. The fine pass gets more margin than coarse specifically:
+// real hardware (this project's own ServoDAQ host) showed 1 fine step
+// (5us) wasn't always enough -- an accuracy-test target landing just
+// past a fine-pass edge reported that way triggered the same spin-the-
+// long-way behavior on a later, unrelated move. MARGIN_US already gives
+// the fine pass a generous 100us head start; this is about the fine
+// pass's own final answer, not the coarse pass feeding into it.
+#define CAL_EDGE_BACKOFF_STEPS 1        // coarse pass
+#define CAL_FINE_EDGE_BACKOFF_STEPS 2   // fine pass
 
 #define CAL_TABLE_POINTS 20   // number of evenly-spaced points, minUs..maxUs inclusive, recorded into calTable
 
@@ -182,6 +188,13 @@ enum CalibrationState {
   STATE_TRAJ_STREAM,
   STATE_TRAJ_WAIT,
   STATE_TRAJ_DONE,
+  // On-demand table query -- yet another separate routine (hence no
+  // CAL_/TRAJ_ prefix), gated on isCalibrated, entered via CMD_GETTABLE.
+  // Just replays the current session's already-built calTable back over
+  // the wire, one entry per tick -- no servo motion, no settling, so
+  // it's not in isWaitingState()'s list and can't time out. See its own
+  // case body in loop().
+  STATE_GETTABLE_SEND,
 };
 
 // Which pass a STATE_CAL_DOWN_*/STATE_CAL_UP_* run is currently doing --
@@ -225,6 +238,7 @@ enum SerialCommand {
   CMD_MODEL,
   CMD_GO,
   CMD_STOPAFTER,
+  CMD_GETTABLE,
 };
 
 // Every error the firmware can raise, in one place -- throwError() below
@@ -233,6 +247,11 @@ enum ErrorCode {
   ERR_CAL_TIMEOUT,       // a calibration wait (CENTER/DOWN/UP/TABLE) timed out
   ERR_TRAJ_TIMEOUT,      // STATE_TRAJ_WAIT timed out -- streamed setpoints but never settled
   ERR_RECOVERY_FAILED,   // STATE_CAL_RECOVER_WAIT ran out of candidates -- see its own comment
+  ERR_CAL_ABS_BOUND,     // a scan hit ABS_FLOOR_US/ABS_CEIL_US without ever finding the edge --
+                          // mirrors this project's ServoDAQ host's own explicit floor_us/ceil_us
+                          // RuntimeError, a real fail-safe in case weak/reversed/big-jump detection
+                          // somehow never triggers (e.g. an encoder fault), not just
+                          // servo.attach()'s own silent PWM clamp
 };
 
 // One calibration table entry -- pulseUs/angleCentideg. Same idea as this
@@ -307,6 +326,19 @@ bool calibrationRunning = false;   // true from CMD_CAL until either the table f
                                     // (abort or timeout) -- handleLine() rejects every command except
                                     // ABORT while this is true
 bool trajectoryRunning = false;    // same idea as calibrationRunning, for CMD_GO instead of CMD_CAL
+bool tableSendRunning = false;     // same idea again, for CMD_GETTABLE instead of CMD_CAL/CMD_GO --
+                                    // see STATE_GETTABLE_SEND
+
+// Declared up here (ahead of where they conceptually belong, alongside
+// resetScanState()/judgeScanStep() further down) purely so changeState()
+// below can clear them on landing at STATE_IDLE -- see their own full
+// comments at judgeScanStep()'s own declaration site for what each does.
+// Without this, a flag left true by an aborted/timed-out run could
+// silently exempt a genuinely real step from judgment on the *next* CAL
+// run.
+bool scanResetPending = false;
+bool skipNextStepCheck = false;
+
 bool justEnteredState = false;             // set by changeState(), consumed once at the top of the
                                             // switch each tick -- lets a case body run one-time entry
                                             // actions without touching currentState/stateEnteredMs itself
@@ -332,13 +364,24 @@ void changeState(CalibrationState newState) {
   elapsedStateTimeMs = 0;
   justEnteredState = true;
   if (newState == STATE_IDLE) {
-    // Landing on STATE_IDLE always means neither a calibration nor a
-    // trajectory run is still in progress, regardless of which path got
-    // us here (abort, timeout) -- each success path clears its own flag
-    // explicitly instead, since those end on STATE_CAL_DONE/STATE_TRAJ_
-    // DONE, not here.
+    // Landing on STATE_IDLE always means neither a calibration, a
+    // trajectory move, nor a table send is still in progress, regardless
+    // of which path got us here (abort, timeout, or -- for
+    // tableSendRunning specifically -- STATE_GETTABLE_SEND's own normal
+    // finish, which lands directly on STATE_IDLE rather than a separate
+    // DONE state the way CAL/TRAJ do). calibrationRunning/
+    // trajectoryRunning's OWN success paths clear themselves explicitly
+    // too, since those end on STATE_CAL_DONE/STATE_TRAJ_DONE, not here --
+    // this block is what catches the abort/timeout paths for them.
+    // scanResetPending/skipNextStepCheck cleared here too for the same
+    // reason: either one left true by an aborted/timed-out run could
+    // silently exempt a genuinely real step from judgment on the *next*
+    // CAL run otherwise.
     calibrationRunning = false;
     trajectoryRunning = false;
+    tableSendRunning = false;
+    scanResetPending = false;
+    skipNextStepCheck = false;
   }
 }
 
@@ -433,6 +476,7 @@ const char* errorCodeToString(ErrorCode code) {
     case ERR_CAL_TIMEOUT:     return "CAL_TIMEOUT";
     case ERR_TRAJ_TIMEOUT:    return "TRAJ_TIMEOUT";
     case ERR_RECOVERY_FAILED: return "RECOVERY_FAILED";
+    case ERR_CAL_ABS_BOUND:   return "CAL_ABS_BOUND";
     default:                  return "UNKNOWN";
   }
 }
@@ -477,6 +521,7 @@ const char* stateName(CalibrationState s) {
     case STATE_TRAJ_STREAM:     return "TRAJ_STREAM";
     case STATE_TRAJ_WAIT:       return "TRAJ_WAIT";
     case STATE_TRAJ_DONE:       return "TRAJ_DONE";
+    case STATE_GETTABLE_SEND:   return "GETTABLE_SEND";
     default:                    return "UNKNOWN";
   }
 }
@@ -596,232 +641,165 @@ void printTelemetry() {
 
 int currentStepUs = CAL_COARSE_STEP_US;   // step size STATE_CAL_DOWN_WRITE/STATE_CAL_UP_WRITE use --
                                            // CAL_COARSE_STEP_US or CAL_FINE_STEP_US, set by
-                                           // beginCoarsePass()/beginFinePass() further down --
-                                           // declared up here since updateStepDelta() below needs
-                                           // it (to normalize a step rate) before either of those
-                                           // functions is defined
+                                           // beginCoarsePass()/beginFinePass() further down
 ScanPhase currentPhase = PHASE_COARSE;
 
 TestStage stopAfterStage = STAGE_ALL;   // set by CMD_STOPAFTER -- see TestStage's own comment
-
-// Running-average baseline over the last CAL_STEP_DELTA_WINDOW_SAMPLES
-// step RATES (counts moved per commanded microsecond, not a raw count) --
-// "how fast does a normal step actually move the shaft, per us
-// commanded." Rate, not raw count, specifically so ONE continuous
-// baseline stays valid whether the step that produced it was a 50us
-// coarse step or a 5us fine one: a real, un-anomalous response moves
-// roughly the same distance per commanded microsecond either way, even
-// though the raw per-step count differs 10x between them. Built up
-// continuously across the *whole* calibration run -- coarse, fine, down,
-// up, all sharing one baseline -- and only ever reset by CENTER's own
-// settle (see its case body), which is the one point that's genuinely
-// the start of a new run, not by beginCoarsePass()/beginFinePass()
-// switching resolution or direction. There's no real reason to throw
-// away a perfectly good baseline just because the step size changed.
-float stepRateBuffer[CAL_STEP_DELTA_WINDOW_SAMPLES];
-int stepRateBufferCount = 0;
-int stepRateBufferIndex = 0;
-float stepRateBufferSum = 0.0f;
-float stepRateAverage = 0.0f;
-
-void updateStepRateAverage(float currentRate) {
-  if (stepRateBufferCount < CAL_STEP_DELTA_WINDOW_SAMPLES) {
-    stepRateBufferSum += currentRate;
-    stepRateBuffer[stepRateBufferCount] = currentRate;
-    stepRateBufferCount++;
-  } else {
-    stepRateBufferSum -= stepRateBuffer[stepRateBufferIndex];
-    stepRateBufferSum += currentRate;
-    stepRateBuffer[stepRateBufferIndex] = currentRate;
-    stepRateBufferIndex = (stepRateBufferIndex + 1) % CAL_STEP_DELTA_WINDOW_SAMPLES;
-  }
-  stepRateAverage = stepRateBufferSum / stepRateBufferCount;
-}
-
-long lastSettledPosition = 0;    // filteredPosition as of the most recent settle this run
-bool stepDeltaPrevSettled = false;   // isSettled as of the last call, to catch the settle-edge below
-bool stepDeltaAnomaly = false;   // true for exactly the tick a settle's step rate was flagged as an oversized jump
-bool stepDeltaStall = false;     // true for exactly the tick a settle's step delta was flagged as ~zero motion
-bool stepDeltaReversed = false;  // true for exactly the tick a settle's step delta went the wrong direction
 
 int stepDirection = -1;   // +1 while sweeping up, -1 while sweeping down -- set explicitly at
                            // CENTER's own transition and at the down-edge -> up-sweep handoff
                            // (see their case bodies), read only by the reversal check below
 
-bool skipNextStepCheck = false;   // set by beginFinePass() -- see its own comment for why the
-                                   // margin back-off's own settle is judged by neither of the
-                                   // three checks below, nor fed into the rate baseline, but
-                                   // still updates lastSettledPosition so the very next (real,
-                                   // uniform-size) step compares against the right reference
+// Per-scan reference-rate + edge-backoff state -- a direct port of this
+// project's own ServoDAQ host's scan_until_weak(): each of the four
+// scans (coarse-down, fine-down, coarse-up, fine-up) self-calibrates its
+// OWN fresh baseline rate from its own first CAL_REFERENCE_STEPS real
+// steps, rather than sharing one continuous baseline across the whole
+// run -- see resetScanState()/judgeScanStep().
+float scanRefDeltaSum = 0.0f;
+int scanRefDeltaCount = 0;
+float scanReferenceRate = -1.0f;   // -1 = not yet established this scan
+bool scanFirstStepPending = true;  // true until this scan's own first real step -- excluded from
+                                    // judgment and from the reference-rate average: the step right
+                                    // off a standing start reliably reads weaker than this servo's
+                                    // real cruise rate (breakaway/stiction), confirmed on real
+                                    // hardware by this project's own ServoDAQ host
+bool scanPrevSettled = false;      // isSettled as of the last call, to catch the settle-edge below
+bool scanEdgeFound = false;        // this tick's judgeScanStep() result -- set once in loop()'s
+                                    // housekeeping, read by STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT's
+                                    // own case bodies
+long scanPrevPosition = 0;         // this scan's last ACCEPTED reading -- what the next step's delta is measured against
+
+// Last two ACCEPTED (pulse, position) pairs, most-recent first -- backing
+// off CAL_EDGE_BACKOFF_STEPS/CAL_FINE_EDGE_BACKOFF_STEPS good steps
+// before a weak/reversed/big-jump step means "N steps back through this
+// history," not just "one step." Both seeded to the scan's own starting
+// point at reset, so backing off 1 or 2 steps from the very first judged
+// step still lands somewhere real (the scan's own start), never garbage.
+int scanBack1Us = 0;   long scanBack1Pos = 0;   // 1 good step back
+int scanBack2Us = 0;   long scanBack2Pos = 0;   // 2 good steps back
+
+// scanResetPending and skipNextStepCheck are both declared earlier,
+// alongside calibrationRunning/trajectoryRunning, so changeState() can
+// clear them on landing at STATE_IDLE -- see that declaration site for
+// why. What each actually does: scanResetPending is set right when a
+// scan's own starting pulse is written -- CENTER_US for a coarse pass,
+// the fine pass's own margin-move target for a fine pass -- and consumed
+// on THAT settle by judgeScanStep(), which resets this scan's
+// reference-rate/backoff state from it rather than judging it as a step.
+// skipNextStepCheck is distinct: it exempts a settle from judgment
+// WITHOUT resetting anything -- used when recovering to a candidate
+// mid-scan, where scanBack1Us/scanBack2Us need to keep meaning what they
+// already meant, since the caller uses scanBack1Us as the edge once
+// spinRecovered fires.
+
+// Resets the per-scan reference-rate/backoff state for a fresh scan --
+// consumed by judgeScanStep() the instant a scan's own starting pulse
+// (CENTER_US for coarse, a fine pass's own margin-move target) settles.
+// startUs/startPos are that settle's own committed pulse and measured
+// position.
+void resetScanState(int startUs, long startPos) {
+  scanRefDeltaSum = 0.0f;
+  scanRefDeltaCount = 0;
+  scanReferenceRate = -1.0f;
+  scanFirstStepPending = true;
+  scanPrevPosition = startPos;
+  scanBack1Us = startUs; scanBack1Pos = startPos;
+  scanBack2Us = startUs; scanBack2Pos = startPos;
+}
 
 // Evaluated once per settle, not once per tick -- checking a raw per-tick
 // derivative would compare noisy in-flight motion against noisy in-flight
 // motion; checking net displacement between two settled positions is the
-// same comparison the Python host made (one delta per commanded move, not
-// per tick), and it's what actually distinguishes a normal step from a
-// stall, a reversal, or an oversized jump.
+// same comparison this project's own ServoDAQ host makes (one delta per
+// commanded move, not per tick).
 //
-// Three independent checks, not one -- they catch different things, need
-// different amounts of history, and one doesn't imply another:
-//   - stepDeltaStall: |stepDelta| itself is ~0 -- a hard stop, encoder
-//     just isn't moving. Absolute, needs no baseline at all, live from
-//     the very first step of the whole run.
-//   - stepDeltaReversed: stepDelta's sign disagrees with stepDirection.
-//     Also needs no baseline -- just the sign, known from tick one.
-//   - stepDeltaAnomaly: an oversized same-direction jump -- a step rate
-//     far from the established baseline. This one does need
-//     CAL_STEP_DELTA_WINDOW_SAMPLES of history before it means anything,
-//     same as before; the baseline being continuous now (not reset per
-//     phase) just means that history builds up once, at the start of the
-//     run, rather than being thrown away and rebuilt every time the step
-//     size changes.
-// Any one of the three is how STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT
-// decide an edge was hit -- what that means (back up and refine, vs. the
-// real edge) depends on currentPhase, decided in the case body, not here.
+// A direct port of that host's scan_until_weak() step judgment: weak
+// (|delta| below CAL_WEAKENING_FRACTION of this scan's own reference
+// rate), reversed (delta's sign disagrees with stepDirection, past the
+// same weakening-fraction floor), or a big jump (|delta| above
+// CAL_BIG_JUMP_MULTIPLE times the reference rate) -- see the constants'
+// own comments for what each catches. All three are purely relative to
+// THIS scan's own self-measured rate; there's no fixed absolute
+// count/threshold anywhere in this function, unlike this file's earlier
+// design. Returns true the instant an edge is found -- there's no
+// debounce/sustained-run requirement (matches every scan_until_weak()
+// call site in servo_daq.py: "trigger on the first weak/reversed step,
+// not a sustained run").
 //
-// All three assume every judged step is a *uniform* size (either
-// currentStepUs's coarse or fine value, never a one-off hybrid) -- real
-// hardware showed why that assumption matters: beginFinePass()'s margin
-// back-off used to get folded into the same commanded move as the first
-// fine step, so that "step" actually moved ~20x currentStepUs. Both
-// stepDirection (a fixed per-sweep sign) and the rate normalization
-// (dividing by currentStepUs) silently assume the move's real size and
-// direction match currentStepUs -- which is only true again once the
-// margin move is its own separate, unjudged settle (skipNextStepCheck
-// above), not combined with the step that follows it.
-void updateStepDelta(long currentPos) {
-  bool justSettled = isSettled && !stepDeltaPrevSettled;
-  stepDeltaPrevSettled = isSettled;
-  stepDeltaAnomaly = false;
-  stepDeltaStall = false;
-  stepDeltaReversed = false;
+// Returns false (never ends the scan) for: a non-settle tick, a
+// scan-reset settle (scanResetPending), a recovery-candidate settle
+// (skipNextStepCheck), and this scan's own first real step
+// (scanFirstStepPending) -- see each flag's own comment.
+bool judgeScanStep(long currentPos) {
+  bool justSettled = isSettled && !scanPrevSettled;
+  scanPrevSettled = isSettled;
   if (!justSettled) {
-    return;
+    return false;
   }
 
-  long stepDelta = currentPos - lastSettledPosition;
-  lastSettledPosition = currentPos;
-
+  if (scanResetPending) {
+    scanResetPending = false;
+    resetScanState(lastSentUs, currentPos);
+    return false;
+  }
   if (skipNextStepCheck) {
     skipNextStepCheck = false;
-    return;
+    return false;
   }
 
-  long absStepDelta = (stepDelta < 0) ? -stepDelta : stepDelta;
-  stepDeltaStall = (absStepDelta <= CAL_STEP_STALL_COUNTS);
+  long signedDelta = currentPos - scanPrevPosition;
+  long delta = (signedDelta < 0) ? -signedDelta : signedDelta;
 
-  bool actualNegative = (stepDelta < 0);
-  bool expectedNegative = (stepDirection < 0);
-  // guarded by !stepDeltaStall so ordinary +-1-count noise while
-  // genuinely stalled never gets misread as a reversal
-  stepDeltaReversed = (!stepDeltaStall) && (actualNegative != expectedNegative);
-
-  // fabsf, not a signed rate: currentStepUs is a magnitude (always
-  // positive), but stepDelta carries the sweep's own sign (negative going
-  // down, positive going up) -- a signed rate would make the down sweep
-  // fill the baseline with ~-1.2..-1.8 and the up sweep's first (and
-  // every) step, at a perfectly normal +1.2..+1.8, look wildly anomalous
-  // by comparison purely from the sign flip. Direction is already
-  // checked separately and correctly by stepDeltaReversed above; this
-  // check is only ever about magnitude.
-  float stepRate = fabsf((float)stepDelta / (float)currentStepUs);
-  if (stepRateBufferCount >= CAL_STEP_DELTA_WINDOW_SAMPLES) {
-    // One-directional on purpose -- only a rate SUBSTANTIALLY LARGER than
-    // baseline counts as an anomaly now. Real hardware showed a smaller
-    // rate isn't a reliable "found the edge" signal on its own: a step
-    // can weaken well before the real edge (500us measured ~0.34 counts/us
-    // against a ~1.4-1.5 baseline, yet the actual hard stop -- a genuine
-    // stepDeltaStall -- wasn't until 450us, one more coarse step down).
-    // stepDeltaStall (absolute, unrelated to this baseline) is what
-    // catches a real stop; this check is specifically for the other
-    // extreme this project has seen on real hardware -- a step moving
-    // much FARTHER than normal (the servo losing its mechanical
-    // reference and spinning past its limit instead of stalling).
-    stepDeltaAnomaly = (stepRate - stepRateAverage > CAL_STEP_JUMP_WINDOW);
+  if (scanFirstStepPending) {
+    scanFirstStepPending = false;
+    scanBack2Us = scanBack1Us; scanBack2Pos = scanBack1Pos;
+    scanBack1Us = lastSentUs; scanBack1Pos = currentPos;
+    scanPrevPosition = currentPos;
+    return false;
   }
 
-  // Only feed a genuinely normal step into the baseline -- a stall,
-  // reversal, or already-flagged anomaly is exactly the kind of sample
-  // that would drag "what does normal look like" toward the edge-
-  // transition zone itself. Real hardware showed this happen: the down
-  // edge's own weakening/stall samples got folded into the same
-  // continuous baseline the up sweep judged its first steps against, so
-  // a genuinely normal up-sweep step (rate consistent with the whole rest
-  // of the sweep) looked anomalous purely because the baseline had
-  // already been dragged down by the down edge's near-zero rates.
-  if (!stepDeltaStall && !stepDeltaAnomaly && !stepDeltaReversed) {
-    updateStepRateAverage(stepRate);
+  bool edgeFound = false;
+  if (scanReferenceRate < 0.0f) {
+    // Still building this scan's own baseline -- no judgment possible yet.
+    scanRefDeltaSum += (float)delta;
+    scanRefDeltaCount++;
+    if (scanRefDeltaCount >= CAL_REFERENCE_STEPS) {
+      scanReferenceRate = scanRefDeltaSum / (float)scanRefDeltaCount;
+    }
+  } else {
+    bool actualNegative = (signedDelta < 0);
+    bool expectedNegative = (stepDirection < 0);
+    bool weak = ((float)delta < CAL_WEAKENING_FRACTION * scanReferenceRate);
+    // guarded by !weak so ordinary jitter while genuinely stopped never
+    // gets misread as a reversal -- matches scan_until_weak()'s own
+    // weakening_fraction noise floor for this check.
+    bool reversed = (!weak) && (actualNegative != expectedNegative);
+    bool bigJump = (!weak) && (!reversed) && ((float)delta > CAL_BIG_JUMP_MULTIPLE * scanReferenceRate);
+    edgeFound = weak || reversed || bigJump;
   }
-}
 
-// Seeds lastSettledPosition/stepDeltaPrevSettled from wherever we just
-// settled, and clears the step-rate baseline -- called exactly once,
-// from CENTER's own case body, since that's the one point that's
-// genuinely the start of a new calibration run (or the start of a fresh
-// run after an earlier abort). beginCoarsePass()/beginFinePass() do NOT
-// call this -- see the step-rate buffer's own comment for why a
-// resolution or direction change isn't a reason to throw the baseline
-// away. Does NOT call changeState() -- that's always done explicitly by
-// the case body that calls this, right after calling it, so every
-// transition is visible directly in the switch rather than hidden inside
-// a setup function.
-void ResetStates() {
-  lastSettledPosition = filteredPosition;
-  stepDeltaPrevSettled = true;
-  stepRateBufferCount = 0;
-  stepRateBufferIndex = 0;
-  stepRateBufferSum = 0.0f;
+  if (edgeFound) {
+    return true;   // this bad step is never "accepted" -- backoff history stays as-is
+  }
+
+  scanBack2Us = scanBack1Us; scanBack2Pos = scanBack1Pos;
+  scanBack1Us = lastSentUs; scanBack1Pos = currentPos;
+  scanPrevPosition = currentPos;
+  return false;
 }
 
 // Switches to full-size steps. Called at CENTER -> down sweep, and again
 // once the down side's fine pass finds the real min (coarse restarts for
-// the up sweep) -- does NOT touch the step-rate baseline either time
-// (see ResetStates()'s own comment).
+// the up sweep).
 void beginCoarsePass() {
   currentStepUs = CAL_COARSE_STEP_US;
   currentPhase = PHASE_COARSE;
 }
 
-// How many fine steps have been taken so far this fine pass -- counted in
-// STATE_CAL_DOWN_WRITE/STATE_CAL_UP_WRITE, compared against
-// CAL_FINE_SWEEP_STEPS to know when the fixed margin has been fully
-// walked. Reset to 0 by beginFinePass().
-int fineStepsTaken = 0;
-
-// The last pulse, during the current fine pass, that actually moved
-// normally (settled with a real, un-stalled step) -- the real reported
-// edge once the fine sweep ends, NOT wherever the sweep happened to stop.
-// Seeded to coarseConfirmedUs by beginFinePass() (the one point already
-// proven-good going in) and only ever advances further in the sweep's own
-// direction from there (each fine step moves strictly further from
-// center than the last), so it can never regress to something less
-// extreme than coarseConfirmedUs -- the min/maxUs clamp against
-// coarseConfirmedUs below is a defensive backstop, not something this
-// should ever actually need to correct.
-int lastNormalFineUs = 0;
-
-// The last coarse pulse that actually moved normally -- captured right
-// before beginFinePass() is called (currentStepUs is still the coarse
-// pass's own step size at that point), one pull-back-by-a-single-step
-// away from lastSentUs (the coarse pulse that just stalled/reversed/
-// anomalied). This is ground truth the coarse pass itself already
-// established: the servo demonstrably moved normally out to here. The
-// fine pass exists to refine that into a tighter number, never to
-// contradict it -- see lastNormalFineUs and its use in
-// STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT below.
-int coarseConfirmedUs = 0;
-
-// lastSentUs at the moment a STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT settle-
-// timeout is treated as a servo-triggered spin/stall-recovery event (see
-// the generic timeout check in loop()) -- captured there, before recovery
-// overwrites lastSentUs with a safe candidate, so the coarse-phase
-// coarseConfirmedUs math (which needs to know which pulse just failed)
-// still has the right input.
-int lastAttemptedUs = 0;
-
 // Set once STATE_CAL_RECOVER_WAIT settles at a safe candidate -- consumed
-// by STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT as a fourth "found the edge"
-// signal, alongside stepDeltaStall/stepDeltaAnomaly/stepDeltaReversed.
+// by STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT as an edge-found signal
+// alongside judgeScanStep()'s own return value.
 bool spinRecovered = false;
 
 // Which recovery candidate STATE_CAL_RECOVER_WAIT is currently trying --
@@ -840,57 +818,56 @@ int recoverCandidateIndex = 0;
 // known-safe pulse, then treat reaching the edge THIS way as no different
 // from reaching it via a plain stall.
 //
-// Candidate 0 is the nearest point already directly confirmed to move
-// normally (coarseConfirmedUs mid-coarse-phase, lastNormalFineUs mid-
-// fine-phase) -- close by, most likely to work, no long trip back.
-// Candidate 1 is CENTER_US, always safe by construction (the very first
-// point every run visits) -- the fallback if even the nearest candidate
-// somehow also fails to settle. Mirrors this project's own ServoDAQ
-// sibling tool's recover_from_wrap(), which needed the same "ordered list
-// of fallback candidates" once a single nearest point wasn't always
-// enough there either.
+// Candidate 0 is scanBack1Us -- the nearest point this scan has already
+// directly confirmed moves normally, regardless of coarse or fine phase
+// (mirrors this project's own ServoDAQ host's recover_from_wrap(), which
+// recovers onto a pulse whose real position is already trusted, not the
+// one that just failed). Candidate 1 is CENTER_US, always safe by
+// construction (the very first point every run visits) -- the fallback
+// if even the nearest candidate somehow also fails to settle. Mirrors
+// that same host function's own "ordered list of fallback candidates,"
+// needed there for the identical reason: a single nearest point wasn't
+// always enough.
 int recoveryCandidateUs(int index) {
   if (index == 0) {
-    return (currentPhase == PHASE_COARSE) ? coarseConfirmedUs : lastNormalFineUs;
+    return scanBack1Us;
   }
   return CENTER_US;
 }
 
-// Called from STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT when a coarse-pass
-// edge hit -- not the real edge yet, just its rough location. Backs the
-// last-commanded pulse up by marginAdjustmentUs (positive to move back up
-// toward center for the down side, negative to move back down for the up
-// side) and switches to fine steps from there.
-//
-// Writes the margin back-off as ITS OWN move, not combined with the first
-// fine step -- real hardware showed why that combining was wrong: it made
-// that one "step" actually move ~20x currentStepUs (margin + one fine
-// step), which broke both the direction check (the margin dominates,
-// often in the OPPOSITE sense of the sweep's own stepDirection, so a
-// perfectly normal response got misread as reversed) and the rate
-// normalization (dividing a ~100us-produced delta by a 5us currentStepUs).
-// The caller transitions to the matching *_WAIT state after calling this,
-// same as any other write; skipNextStepCheck (consumed by
-// updateStepDelta()) means that WAIT's settle is watched for timeout the
-// same as always, just not judged by stall/reversed/anomaly or folded
-// into the rate baseline -- once it settles, the caller falls through to
-// its own isSettled branch and takes the real first fine step normally,
-// now a uniform, cleanly-judged currentStepUs move like every step after
-// it.
-void beginFinePass(int marginAdjustmentUs) {
+// Writes the fine pass's own starting pulse directly -- targetUs, an
+// absolute pulse, not an adjustment from wherever lastSentUs currently
+// is. That distinction matters: right as a coarse pass ends, lastSentUs
+// is the BAD pulse that triggered the edge, not the confirmed-good edge
+// itself -- real hardware showed computing the margin from that bad/
+// overshoot pulse could still land inside whatever stuck/recovering
+// state caused the overshoot in the first place. Mirrors this project's
+// ServoDAQ host's own fine_start = coarse_pulse - direction*MARGIN_US: a
+// single move straight from wherever the coarse scan left off to the
+// fine pass's own start, computed from the REPORTED edge, never the
+// failing pulse. The caller transitions to the matching *_WAIT state
+// after calling this, same as any other write; scanResetPending means
+// that settle resets this scan's own reference-rate/backoff state
+// (rather than being judged as a step) before the real first fine step
+// is taken, by STATE_CAL_DOWN_WRITE/UP_WRITE once this WAIT's isSettled
+// branch fires.
+void beginFinePass(int targetUs) {
   currentStepUs = CAL_FINE_STEP_US;
   currentPhase = PHASE_FINE;
-  skipNextStepCheck = true;
-  fineStepsTaken = 0;
-  lastNormalFineUs = coarseConfirmedUs;
-  writeServoUs(lastSentUs + marginAdjustmentUs);
+  scanResetPending = true;
+  writeServoUs(targetUs);
 }
 
-int minUs = 0;   // set once the fine pass ends -- see lastNormalFineUs
-int maxUs = 0;   // set once the fine pass ends -- see lastNormalFineUs
+int minUs = 0;   // set once the fine-down pass reports its edge
+int maxUs = 0;   // set once the fine-up pass reports its edge
 
 CalPoint calTable[CAL_TABLE_POINTS];
 int tableIndex = 0;   // which calTable entry STATE_CAL_TABLE_WRITE/STATE_CAL_TABLE_WAIT is on
+int getTableIndex = 0;   // which calTable entry STATE_GETTABLE_SEND is on -- deliberately its own
+                          // variable, not a reuse of tableIndex: the two never run concurrently
+                          // (CMD_GETTABLE is rejected via the busy-gate while calibrationRunning),
+                          // but sharing one counter across two logically distinct purposes is the
+                          // kind of thing that quietly breaks the next time that assumption changes
 
 // The table is built from two passes, not one -- a down sweep
 // (maxUs->minUs, where the fine-up pass already left the servo, so it
@@ -945,6 +922,21 @@ int32_t rawAngleCentideg() {
   return (int32_t)(totalCounts * 36000L / 4096L);
 }
 
+// Streams one calTable entry over the wire, as "TABLE <idx> <pulseUs>
+// <angleCentideg>" -- shared by recordTableEntry() below (a genuinely new
+// reading, just measured) and STATE_GETTABLE_SEND (an existing entry from
+// an already-built table, just being replayed back out on request), so
+// both stay in the exact same wire shape automatically rather than two
+// independent snprintf() calls silently drifting apart.
+void printTableEntry(int idx) {
+  char buf[40];
+  // %ld for angleCentideg -- it's int32_t/long now, not int; a bare %d
+  // there would read the wrong bytes off the varargs stack on AVR (16-bit
+  // int).
+  snprintf(buf, sizeof(buf), "TABLE %d %d %ld", idx, calTable[idx].pulseUs, calTable[idx].angleCentideg);
+  printMessage(buf);
+}
+
 // Called from STATE_CAL_TABLE_WAIT once a table point settles. No
 // truncating cast to int16_t here -- angleCentideg is int32_t precisely so
 // this doesn't need one. Index progression is the caller's job now
@@ -962,14 +954,7 @@ void recordTableEntry() {
     // readings into the final value.
     calTable[tableIndex].angleCentideg = (calTable[tableIndex].angleCentideg + angleCentideg) / 2;
   }
-
-  char buf[40];
-  // %ld for angleCentideg -- it's int32_t/long now, not int; a bare %d
-  // there would read the wrong bytes off the varargs stack on AVR (16-bit
-  // int).
-  snprintf(buf, sizeof(buf), "TABLE %d %d %ld", tableIndex,
-           calTable[tableIndex].pulseUs, calTable[tableIndex].angleCentideg);
-  printMessage(buf);
+  printTableEntry(tableIndex);
 }
 
 // The 2-point "linear" model, in the same CalPoint shape as calTable --
@@ -1090,6 +1075,7 @@ SerialCommand parseCommand(const char* cmdTok) {
   if (strcmp(cmdTok, "MODEL") == 0) return CMD_MODEL;
   if (strcmp(cmdTok, "GO") == 0) return CMD_GO;
   if (strcmp(cmdTok, "STOPAFTER") == 0) return CMD_STOPAFTER;
+  if (strcmp(cmdTok, "GETTABLE") == 0) return CMD_GETTABLE;
   return CMD_UNKNOWN;
 }
 
@@ -1120,18 +1106,24 @@ int tokenizeLine(char* line) {
 // to one already streaming. MODEL LINEAR/TABLE switches useTable; anything
 // else is rejected. GO plans and starts a trajectory move to
 // targetPositionDeg -- rejected (ERR NOT_CALIBRATED) until isCalibrated.
-// While calibrationRunning or trajectoryRunning, every command except
-// ABORT is rejected outright -- nothing overlaps a run in progress. PING
-// is the other deliberate exception: a pure liveness check, no side
-// effects, so a host app can confirm the connection is alive without
-// having to wait out whatever run is in progress. Anything unrecognized,
-// or with the wrong number of arguments, is rejected too.
+// GETTABLE replays the current session's already-built calTable back
+// over the wire (STATE_GETTABLE_SEND) -- also rejected (ERR NOT_
+// CALIBRATED) until isCalibrated; unlike CAL/GO it does NOT ack
+// immediately, since the whole send finishes well under a second (see
+// STATE_GETTABLE_SEND's own comment) -- its one reply comes only once
+// every point has actually gone out. While calibrationRunning,
+// trajectoryRunning, or tableSendRunning, every command except ABORT is
+// rejected outright -- nothing overlaps a run in progress. PING is the
+// other deliberate exception: a pure liveness check, no side effects, so
+// a host app can confirm the connection is alive without having to wait
+// out whatever run is in progress. Anything unrecognized, or with the
+// wrong number of arguments, is rejected too.
 void handleLine(char* line) {
   int n = tokenizeLine(line);
   if (n == 0) return;
 
   SerialCommand cmd = parseCommand(tok[0]);
-  if ((calibrationRunning || trajectoryRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
+  if ((calibrationRunning || trajectoryRunning || tableSendRunning) && cmd != CMD_ABORT && cmd != CMD_PING) {
     Serial.println(F("ERR BUSY"));
     return;
   }
@@ -1208,6 +1200,18 @@ void handleLine(char* line) {
       } else {
         Serial.println(F("ERR USAGE"));
       }
+      break;
+    case CMD_GETTABLE:
+      if (!isCalibrated) {
+        Serial.println(F("ERR NOT_CALIBRATED"));
+        break;
+      }
+      tableSendRunning = true;
+      getTableIndex = 0;
+      changeState(STATE_GETTABLE_SEND);
+      // No immediate "OK" here -- see this function's own header comment
+      // and STATE_GETTABLE_SEND for why GETTABLE's reply is deferred
+      // instead of acknowledging up front like CAL/GO do.
       break;
     default:
       Serial.println(F("ERR UNKNOWN_CMD"));
@@ -1289,24 +1293,21 @@ void loop() {
 
   // Gated to an active down/up pass specifically (coarse or fine, either
   // one) -- STATE_CAL_CENTER's own settle is not a pass step and must
-  // never reach updateStepDelta() (ResetStates() already seeds the
-  // baseline from that settle, or from the previous pass's last step,
-  // wherever it's called). STATE_CAL_UP_CENTER *is* included, even though
-  // its own settle isn't judged either (skipNextStepCheck, set before that
-  // move is written -- see its call site) -- it still needs to reach
-  // updateStepDelta() so lastSettledPosition gets re-anchored to the
-  // settled-at-CENTER_US position. Real hardware showed why that matters:
-  // without it, lastSettledPosition stays stale at the down edge's
-  // position across the whole recenter move, so the first real coarse-up
-  // step's delta is computed against a position from clear across the
-  // sweep -- an enormous, spurious "jump" that silently ends the up pass
-  // right on its first step (lands on STATE_CAL_DONE, which prints
-  // nothing, so it looked like a hang rather than a false detection).
+  // never reach judgeScanStep() (its own case body calls resetScanState()
+  // directly instead). STATE_CAL_UP_CENTER *is* included, even though its
+  // own settle isn't judged either (scanResetPending, set before that
+  // move is written -- see DOWN_WAIT's own case body) -- it still needs
+  // to reach judgeScanStep() so the coarse-up scan's reference-rate/
+  // backoff state actually gets reset from the settled-at-CENTER_US
+  // position. Real hardware showed why re-anchoring like this matters (in
+  // this file's earlier design, the equivalent miss silently ended the up
+  // pass right on its first step, landing on STATE_CAL_DONE with nothing
+  // printed -- looked like a hang rather than a false detection).
   if (currentState == STATE_CAL_DOWN_WRITE || currentState == STATE_CAL_DOWN_WAIT ||
       currentState == STATE_CAL_RECOVER_WAIT ||
       currentState == STATE_CAL_UP_CENTER ||
       currentState == STATE_CAL_UP_WRITE || currentState == STATE_CAL_UP_WAIT) {
-    updateStepDelta(filteredPosition);
+    scanEdgeFound = judgeScanStep(filteredPosition);
   }
 
   if (abortRequested) {   // exit route 3, shared by every state: abort forces STATE_IDLE
@@ -1331,16 +1332,10 @@ void loop() {
   // than an error to just report.
   if (isWaitingState(currentState) && elapsedStateTimeMs >= CAL_SETTLE_TIMEOUT_MS) {
     if (currentState == STATE_CAL_DOWN_WAIT || currentState == STATE_CAL_UP_WAIT) {
-      lastAttemptedUs = lastSentUs;
-      if (currentPhase == PHASE_COARSE) {
-        // Same math STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT's own coarse
-        // branch already uses on a plain stall -- undo the one coarse
-        // step that just failed to find the last pulse that moved
-        // normally, computed now while lastAttemptedUs still holds it
-        // (lastSentUs is about to become the recovery candidate instead).
-        coarseConfirmedUs = (stepDirection < 0) ? (lastAttemptedUs + currentStepUs)
-                                                 : (lastAttemptedUs - currentStepUs);
-      }
+      // scanBack1Us already holds "the last pulse this scan directly
+      // confirmed moves normally" -- judgeScanStep() maintains it
+      // continuously, so there's nothing to (re)compute here the way
+      // this file's earlier design needed to.
       recoverCandidateIndex = 0;
       skipNextStepCheck = true;
       writeServoUs(recoveryCandidateUs(recoverCandidateIndex));
@@ -1366,9 +1361,12 @@ void loop() {
         // settled, per updateSettled() -- the timeout exit route is
         // handled generically above, for every waiting state at once.
         // This is the one genuine start of a new calibration run, so
-        // it's the one place the step-rate baseline gets seeded/cleared
-        // (see ResetStates()'s own comment) and stepDirection set.
-        ResetStates();
+        // it's the one place the coarse-down scan's own reference-rate/
+        // backoff state gets reset -- directly, not through
+        // judgeScanStep()/scanResetPending (CENTER's own settle
+        // deliberately never reaches that shared path -- see loop()'s
+        // own comment) -- and stepDirection set.
+        resetScanState(CENTER_US, filteredPosition);
         stepDirection = -1;
         beginCoarsePass();
         changeState(STATE_CAL_DOWN_WRITE);
@@ -1377,52 +1375,63 @@ void loop() {
 
     case STATE_CAL_DOWN_WRITE:
       // One-tick state: take the next step down, then immediately hand
-      // off to STATE_CAL_DOWN_WAIT to watch it.
-      lastSentUs -= currentStepUs;
-      if (currentPhase == PHASE_FINE) {
-        fineStepsTaken++;
+      // off to STATE_CAL_DOWN_WAIT to watch it. Hard pulse-bound check
+      // mirrors this project's ServoDAQ host's own explicit floor_us/
+      // ceil_us RuntimeError -- a real fail-safe in case weak/reversed/
+      // big-jump detection somehow never triggers (e.g. an encoder
+      // fault), not just servo.attach()'s own silent PWM clamp.
+      {
+        int nextUs = lastSentUs - currentStepUs;
+        if (nextUs < ABS_FLOOR_US || nextUs > ABS_CEIL_US) {
+          throwError(ERR_CAL_ABS_BOUND);
+          calibrationRunning = false;
+          changeState(STATE_IDLE);
+          break;
+        }
+        lastSentUs = nextUs;
       }
       writeServoUs(lastSentUs);
       changeState(STATE_CAL_DOWN_WAIT);
       break;
 
-    case STATE_CAL_DOWN_WAIT:
-      if (currentPhase == PHASE_FINE) {
-        // Mirrors the coarse branch below: any of spinRecovered/
-        // stepDeltaStall/stepDeltaAnomaly/stepDeltaReversed means the
-        // edge was just found -- same detection functions/thresholds as
-        // coarse (updateStepDelta() doesn't distinguish phase), so fine
-        // is exactly as sensitive as coarse, never more forgiving just
-        // because its own steps are smaller. CAL_FINE_SWEEP_STEPS is a
-        // hard safety cap (walk the whole margin without ever finding a
-        // definitive edge -> stop anyway, using whatever's the last
-        // known-good position) -- not the normal way this ends; finding
-        // the edge is.
-        bool edgeFound = spinRecovered || stepDeltaStall || stepDeltaAnomaly || stepDeltaReversed;
-        spinRecovered = false;
-        if (!edgeFound && isSettled) {
-          // fineStepsTaken == 0 means this settle is the margin move
-          // itself, not a real fine step -- skipNextStepCheck already
-          // exempted it from judgment (every flag above reads false for
-          // it), so it must not touch lastNormalFineUs or the safety cap.
-          if (fineStepsTaken > 0) {
-            lastNormalFineUs = lastSentUs;   // this step moved normally
-            edgeFound = (fineStepsTaken >= CAL_FINE_SWEEP_STEPS);   // safety cap
+    case STATE_CAL_DOWN_WAIT: {
+      // A direct port of this project's ServoDAQ host's find_edge():
+      // judgeScanStep() (called in loop()'s housekeeping, before this
+      // switch runs) already decided whether this settle found the edge
+      // -- scanEdgeFound -- using the exact same weak/reversed/big-jump
+      // logic for both coarse and fine (see its own comment); spinRecovered
+      // is the other way an edge gets reported, via an active-recovery
+      // settle-timeout (mirrors that same host's NotSettledError ->
+      // recover_from_wrap()). Recovery always reports scanBack1Us
+      // directly (mirrors trace[-1], no further backoff, regardless of
+      // phase); a rate-detected edge backs off CAL_EDGE_BACKOFF_STEPS
+      // (coarse) or CAL_FINE_EDGE_BACKOFF_STEPS (fine) good steps instead
+      // -- see the constants' own comments for why fine gets more margin.
+      bool edgeFound = spinRecovered || scanEdgeFound;
+      bool viaRecovery = spinRecovered;
+      spinRecovered = false;
+      if (edgeFound) {
+        int edgeUs = (viaRecovery || currentPhase == PHASE_COARSE) ? scanBack1Us : scanBack2Us;
+        if (currentPhase == PHASE_COARSE) {
+          if (stopAfterStage == STAGE_COARSE_DOWN) {
+            // isolating this one stage for testing -- see TestStage's
+            // own comment. calibrationRunning cleared explicitly, same
+            // as the normal finish line in STATE_CAL_TABLE_WAIT -- this
+            // lands on STATE_CAL_DONE too, not STATE_IDLE, so
+            // changeState() won't clear it automatically.
+            calibrationRunning = false;
+            changeState(STATE_CAL_DONE);
+          } else {
+            // Rough location only -- refine in fine steps, a fixed
+            // CAL_FINE_MARGIN_US back toward center from the reported
+            // coarse edge (not from wherever lastSentUs currently sits --
+            // see beginFinePass()'s own comment for why that distinction
+            // matters).
+            beginFinePass(edgeUs + CAL_FINE_MARGIN_US);
+            changeState(STATE_CAL_DOWN_WAIT);
           }
-          if (!edgeFound) {
-            changeState(STATE_CAL_DOWN_WRITE);
-          }
-        }
-        if (edgeFound) {
-          // The real down edge: the last pulse that actually moved, not
-          // wherever it happened to stop. Clamped against
-          // coarseConfirmedUs as a defensive backstop -- see
-          // lastNormalFineUs's own comment for why that should never
-          // actually fire.
-          minUs = lastNormalFineUs;
-          if (minUs > coarseConfirmedUs) {
-            minUs = coarseConfirmedUs;
-          }
+        } else {
+          minUs = edgeUs;
           if (stopAfterStage == STAGE_FINE_DOWN) {
             // isolating this one stage for testing -- see TestStage's own
             // comment. minUs is already recorded above; just stop here
@@ -1432,64 +1441,23 @@ void loop() {
           } else {
             // Up sweep always starts from CENTER_US, not from wherever the
             // down sweep/fine pass left off -- see STATE_CAL_UP_CENTER's
-            // own comment. stepDirection/beginCoarsePass() happen once that
-            // return move has actually settled, not here. skipNextStepCheck
-            // exempts this move's own settle from being judged as a step
-            // (same mechanism beginFinePass()'s margin move uses) -- it
-            // still updates lastSettledPosition, just doesn't flag this
-            // huge jump as a stall/anomaly/reversal.
-            skipNextStepCheck = true;
+            // own comment. stepDirection/beginCoarsePass() happen once
+            // that return move has actually settled, not here.
+            // scanResetPending exempts this move's own settle from being
+            // judged as a step (same mechanism beginFinePass()'s margin
+            // move uses) and resets the coarse-up scan's own
+            // reference-rate/backoff state from wherever it lands.
+            scanResetPending = true;
             writeServoUs(CENTER_US);
             changeState(STATE_CAL_UP_CENTER);
           }
         }
-      } else if (spinRecovered || stepDeltaStall || stepDeltaAnomaly || stepDeltaReversed) {
-        // coarse phase -- settled, but not with a normal step delta -- it
-        // barely moved (stall), moved the wrong way (reversed), moved too
-        // far from the established rate baseline (anomaly), or never
-        // settled at all and had to be recovered from (spinRecovered --
-        // see loop()'s own comment) -- see updateStepDelta()'s own
-        // comment for what each of the first three needs. No debounce
-        // here (unlike the fine pass above) -- coarse's result only sets
-        // where the fine pass starts, not the final number.
-        bool viaRecovery = spinRecovered;
-        spinRecovered = false;
-        if (stopAfterStage == STAGE_COARSE_DOWN) {
-          // isolating this one stage for testing -- see TestStage's
-          // own comment. Stop right here, don't start the fine pass.
-          // calibrationRunning cleared explicitly, same as the normal
-          // finish line in STATE_CAL_TABLE_WAIT -- this lands on
-          // STATE_CAL_DONE too, not STATE_IDLE, so changeState() won't
-          // clear it automatically.
-          calibrationRunning = false;
-          changeState(STATE_CAL_DONE);
-        } else {
-          if (!viaRecovery) {
-            // rough location only -- back up and refine in fine steps.
-            // coarseConfirmedUs: lastSentUs is the pulse that just
-            // stalled/reversed/anomalied, currentStepUs is still the
-            // coarse step size right here (beginFinePass() hasn't
-            // switched it to fine yet) -- adding it back gives the
-            // previous coarse pulse, the last one that moved normally.
-            // Via recovery, coarseConfirmedUs is already set -- computed
-            // in loop() at the moment the spin was detected, from
-            // lastAttemptedUs (the pulse that failed), since lastSentUs
-            // here is now the recovered safe pulse instead and this same
-            // formula would give a nonsense answer applied to it.
-            coarseConfirmedUs = lastSentUs + currentStepUs;
-          }
-          // beginFinePass() already wrote the margin move itself, so we
-          // wait for THAT to settle (skipNextStepCheck means it won't be
-          // judged) before the real first fine step, taken normally by
-          // STATE_CAL_DOWN_WRITE once this WAIT's isSettled branch fires.
-          beginFinePass(CAL_FINE_MARGIN_US);
-          changeState(STATE_CAL_DOWN_WAIT);
-        }
       } else if (isSettled) {
-        // settled with a normal, valid coarse step -- keep sweeping
+        // settled with a normal, valid step -- keep sweeping
         changeState(STATE_CAL_DOWN_WRITE);
       }
       break;
+    }
 
     case STATE_CAL_RECOVER_WAIT:
       // Not in isWaitingState()'s generic timeout list on purpose -- see
@@ -1519,18 +1487,14 @@ void loop() {
 
     case STATE_CAL_UP_CENTER:
       // The down edge was just found; the servo is sitting wherever the
-      // fine pass's fixed sweep left it. writeServoUs(CENTER_US) and
-      // skipNextStepCheck=true already
-      // happened in the DOWN_WAIT branch that got us here, same one-shot-
-      // write-then-wait pattern as every other transition -- this state
-      // just watches it settle. It IS gated into updateStepDelta() (see
-      // loop()'s own comment) so lastSettledPosition gets re-anchored
-      // here, but skipNextStepCheck means this big jump itself is never
-      // judged as a stall/anomaly/reversal -- exactly like beginFinePass()'s
-      // margin move. The step-rate baseline (stepRateAverage) is left
-      // alone here regardless (skipNextStepCheck's early return in
-      // updateStepDelta() skips that too) -- same "continuously held
-      // buffer" reasoning as beginCoarsePass()/beginFinePass() themselves.
+      // fine pass left it. writeServoUs(CENTER_US) and
+      // scanResetPending=true already happened in the DOWN_WAIT branch
+      // that got us here, same one-shot-write-then-wait pattern as every
+      // other transition -- this state just watches it settle. It IS
+      // gated into judgeScanStep() (see loop()'s own comment) so the
+      // coarse-up scan's reference-rate/backoff state gets reset from
+      // this settled-at-CENTER_US position, exactly like beginFinePass()'s
+      // margin move resets the fine scan that follows it.
       if (isSettled) {
         stepDirection = 1;
         beginCoarsePass();
@@ -1540,35 +1504,40 @@ void loop() {
 
     case STATE_CAL_UP_WRITE:
       // Mirrors STATE_CAL_DOWN_WRITE -- += instead of -=.
-      lastSentUs += currentStepUs;
-      if (currentPhase == PHASE_FINE) {
-        fineStepsTaken++;
+      {
+        int nextUs = lastSentUs + currentStepUs;
+        if (nextUs < ABS_FLOOR_US || nextUs > ABS_CEIL_US) {
+          throwError(ERR_CAL_ABS_BOUND);
+          calibrationRunning = false;
+          changeState(STATE_IDLE);
+          break;
+        }
+        lastSentUs = nextUs;
       }
       writeServoUs(lastSentUs);
       changeState(STATE_CAL_UP_WAIT);
       break;
 
-    case STATE_CAL_UP_WAIT:
+    case STATE_CAL_UP_WAIT: {
       // Mirrors STATE_CAL_DOWN_WAIT throughout, see its own comments.
-      if (currentPhase == PHASE_FINE) {
-        bool edgeFound = spinRecovered || stepDeltaStall || stepDeltaAnomaly || stepDeltaReversed;
-        spinRecovered = false;
-        if (!edgeFound && isSettled) {
-          if (fineStepsTaken > 0) {
-            lastNormalFineUs = lastSentUs;
-            edgeFound = (fineStepsTaken >= CAL_FINE_SWEEP_STEPS);   // safety cap
+      bool edgeFound = spinRecovered || scanEdgeFound;
+      bool viaRecovery = spinRecovered;
+      spinRecovered = false;
+      if (edgeFound) {
+        int edgeUs = (viaRecovery || currentPhase == PHASE_COARSE) ? scanBack1Us : scanBack2Us;
+        if (currentPhase == PHASE_COARSE) {
+          if (stopAfterStage == STAGE_COARSE_UP) {
+            // isolating this one stage for testing -- see TestStage's own
+            // comment. Same calibrationRunning note as STATE_CAL_DOWN_WAIT's
+            // own branch.
+            calibrationRunning = false;
+            changeState(STATE_CAL_DONE);
+          } else {
+            beginFinePass(edgeUs - CAL_FINE_MARGIN_US);
+            changeState(STATE_CAL_UP_WAIT);
           }
-          if (!edgeFound) {
-            changeState(STATE_CAL_UP_WRITE);
-          }
-        }
-        if (edgeFound) {
-          // Here "more conservative" means lower pulse, less travel --
-          // the mirror image of STATE_CAL_DOWN_WAIT's own clamp.
-          maxUs = lastNormalFineUs;
-          if (maxUs < coarseConfirmedUs) {
-            maxUs = coarseConfirmedUs;
-          }
+        } else {
+          maxUs = edgeUs;
           if (stopAfterStage == STAGE_FINE_UP) {
             // isolating this one stage for testing -- see TestStage's own
             // comment. maxUs is already recorded above; stop here instead
@@ -1584,27 +1553,11 @@ void loop() {
             changeState(STATE_CAL_TABLE_WRITE);
           }
         }
-      } else if (spinRecovered || stepDeltaStall || stepDeltaAnomaly || stepDeltaReversed) {
-        // mirrors STATE_CAL_DOWN_WAIT's own coarse branch, see its comments
-        bool viaRecovery = spinRecovered;
-        spinRecovered = false;
-        if (stopAfterStage == STAGE_COARSE_UP) {
-          // isolating this one stage for testing -- see TestStage's own
-          // comment. Stop right here, don't start the fine pass. Same
-          // calibrationRunning note as STATE_CAL_DOWN_WAIT's own branch.
-          calibrationRunning = false;
-          changeState(STATE_CAL_DONE);
-        } else {
-          if (!viaRecovery) {
-            coarseConfirmedUs = lastSentUs - currentStepUs;
-          }
-          beginFinePass(-CAL_FINE_MARGIN_US);
-          changeState(STATE_CAL_UP_WAIT);
-        }
       } else if (isSettled) {
         changeState(STATE_CAL_UP_WRITE);
       }
       break;
+    }
 
     case STATE_CAL_TABLE_WRITE:
       // One-tick state: command the next table point, then immediately
@@ -1713,6 +1666,33 @@ void loop() {
       break;
 
     case STATE_TRAJ_DONE:
+      break;
+
+    case STATE_GETTABLE_SEND:
+      // One entry per tick, oldest-first -- same one-thing-per-tick FSM
+      // shape this file uses everywhere else (STATE_CAL_TABLE_WRITE/WAIT
+      // et al.), rather than blasting all CAL_TABLE_POINTS lines out of
+      // one loop() call. No motion or settling involved: calTable is
+      // already sitting in RAM from the last CAL run, this just replays
+      // it back out on request via the same printTableEntry() formatter
+      // recordTableEntry() itself uses. The one "OK GETTABLE" reply --
+      // unlike CAL/GO's immediate ack -- lands only once every point has
+      // actually gone out: at CAL_TABLE_POINTS ticks (well under a
+      // second at this 50Hz rate), a plain synchronous request/response
+      // round trip fits comfortably inside a normal command timeout,
+      // unlike CAL (up to ~a minute) or GO (however long the move
+      // takes), which both need to ack up front so the caller isn't
+      // blocked that long. (An ABORT landing mid-send would force
+      // STATE_IDLE without this reply ever going out -- a real but
+      // low-stakes edge case: nothing physical is in flight to abort
+      // here, the caller just sees its GETTABLE time out instead of
+      // erroring cleanly.)
+      printTableEntry(getTableIndex);
+      getTableIndex++;
+      if (getTableIndex >= CAL_TABLE_POINTS) {
+        changeState(STATE_IDLE);   // tableSendRunning cleared there
+        Serial.println(F("OK GETTABLE"));
+      }
       break;
   }
 }
