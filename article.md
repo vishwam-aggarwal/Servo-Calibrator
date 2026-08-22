@@ -24,6 +24,8 @@ Nine servos, three families — a Miuzei 25kg Servo, a knockoff MG996R, and an M
 
 55,029 independent trials, six models compared per servo (the naive 2-point linear formula, plus 10/20/30/40/50-point lookup tables), across every unit — not a residual against the calibration curve that produced the table in the first place.
 
+Everything below is the pooled, family-level view. If you want the unabridged version — every unit's own range-finding sweep, calibration curve, backlash, and accuracy, not averaged together — the [full dataset](/articles/your-servo-is-lying-to-you/data) has all of it.
+
 <div class="chart-figure">
 <p class="chart-title">Mean error vs. model complexity, pooled across all nine servos</p>
 <svg viewBox="0 0 680 260" role="img" aria-label="Line chart showing mean absolute error dropping sharply from the naive linear model at 1.33 degrees to a 10-point table at 0.43 degrees, then staying nearly flat through a 50-point table at 0.41 degrees">
