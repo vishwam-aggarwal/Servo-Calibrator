@@ -37,12 +37,40 @@ website/
                   #   website/app.html)
   images/
     <filename>    # images referenced by article.md/data.md/tool.md
+  sources/
+    <filename>    # editable source behind an image in images/ (Fritzing
+                  #   .fzz, KiCad/Eagle projects, Illustrator, etc.) —
+                  #   never fetched/served, pure repo hygiene, see below
   STYLE_GUIDE.md  # this file
 ```
 
 Only include the files this repo actually needs — a repo with no browser
 tool has no `tool.md`/`app.html`; a repo with no companion dataset has no
-`data.md`.
+`data.md`; no `sources/` at all if nothing in `images/` has (or needs) an
+editable source kept around.
+
+### `sources/` — editable source files behind an image
+
+If an image in `images/` was exported from something editable (a
+Fritzing wiring diagram, a KiCad/Eagle schematic, an Illustrator file,
+whatever) and you want to keep that source around for future edits, it
+goes in `sources/`, named to **exactly match the exported image's
+basename**, extension aside:
+
+```
+website/images/hookup.png   <->   website/sources/hookup.fzz
+```
+
+That's the entire convention — one folder, one naming rule (match the
+basename), no per-tool registry to update. It works the same way
+regardless of which design tool produced the source, so a future KiCad
+or Illustrator file needs no new rule invented for it.
+
+**Never referenced by `content.config.ts` and never fetched by the
+website** — `sources/` is pure repo-side hygiene for whoever edits the
+diagram later, not build input. Don't add a `sources/*` entry to any
+loader's `images` array; there's nothing for the site to do with a raw
+`.fzz` file, it can't render it.
 
 **To register a new source**: add one entry to the relevant array
 (`articleSources`, `toolPageSources`, `toolAppSources`) in the website
@@ -377,6 +405,8 @@ automatically.
 - [ ] No blank line inside any raw HTML/SVG block
 - [ ] Images live in `website/images/`, referenced by their website URL
       (`/images/<id>/<filename>`), not a repo-relative path
+- [ ] Any kept editable source for an image (Fritzing/KiCad/etc.) lives in
+      `website/sources/`, named to match that image's basename
 - [ ] `tool.md` doesn't re-implement the tag row, status badge,
       Launch/GitHub buttons, or comment section — those come from the
       template automatically
