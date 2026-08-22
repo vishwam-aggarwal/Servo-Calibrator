@@ -1495,3 +1495,52 @@ errors, though (as before) this didn't exercise an actual live
 `STYLE_GUIDE.md`, `website/STYLE_GUIDE.md` here): every tool's
 `app.html`, in every repo, is expected to match the site's palette/fonts
 this same way going forward -- not a one-off fix just for this tool.
+
+## Live-trace charts bleeding past their own box; Export now emits a ready-to-use `.h` file (2026-08-22)
+
+**A real rendering bug, reported with a screenshot.** The live trace's
+three rolling charts (Position/Velocity/Error) could show a stray
+squiggly line running vertically through all three stacked chart panels,
+right along the boundary with the left column's scrollbar. Diagnosed
+live rather than guessed: served `website/` locally, loaded `app.html`
+in a real browser (`claude-in-chrome`), and injected synthetic samples
+into the page's own `samples` array reproducing the screenshot's exact
+readout (setpoint 146.07°, actual 235.80°, error +89.73°). A flat-value
+version of that data didn't reproduce it, but a version with a genuinely
+moving setpoint did -- confirmed via `getBoundingClientRect()`/path `d`
+inspection that `drawRollingChart()`'s deliberate 0.5s pre-buffer
+(`samples.filter(s => s.t >= xMin - 0.5)`, meant to avoid a visible
+"pop-in" as the trace scrolls) produces path x-coordinates left of the
+chart's own margin, occasionally negative. `svg.chart`'s CSS had
+`overflow: visible`, so that intentional off-window sliver wasn't
+clipped to the SVG's own box and bled out its left edge into the
+scrollbar area -- three charts doing this at the same x-position,
+stacked with small gaps, is exactly what reads as one continuous
+squiggle spanning all three. **Fix**: `overflow: visible` → `overflow:
+hidden` on `svg.chart` -- one line. Re-verified with the same synthetic
+data afterward: every trace now cuts off cleanly at its own chart's left
+border instead of escaping into the left column.
+
+**Export now downloads a standalone `.h` file, not JSON**, per explicit
+request: the JSON blob required a consumer to hand-transcribe its points
+into a `PROGMEM` array themselves before it was usable in any Arduino
+project. `buildCalibrationHeader()` (`website/app.html`, next to
+`buildCalibrationFromEntries()`) renders the same calibration object as
+a plain `struct CalPoint { uint16_t pulseUs; int16_t angleCentideg; };`
+plus a populated `static const CalPoint SERVO_CAL_TABLE[]` array --
+field-for-field identical to UMI's own `ServoCalibrationTable.h` struct
+(checked directly against the installed library at
+`Documents/Arduino/libraries/Universal-Motor-Interface/src/ServoCalibrationTable.h`),
+so it drops straight into `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s
+table-accepting constructor overload with no manual transcription. Per
+explicit direction, the generated file never names or mentions UMI --
+it's a self-contained `.h` (`#pragma once` + `#include <stdint.h>` only)
+that's directly usable by any C/C++ project whether or not it ever
+touches UMI, plain-RAM (deliberately **not** `PROGMEM`, unlike UMI's own
+worked example) so a value is readable by ordinary array indexing with
+no `pgm_read_word()` step required -- a consumer who does want it in
+flash for a real UMI-driven build can add `PROGMEM` themselves. Verified
+via `claude-in-chrome`: fed the real function a realistic 20-point
+calibration object and confirmed the emitted text (comment header with
+pulse range/stroke/timestamp, then the struct, then the array) is clean,
+valid C matching the intended shape exactly.

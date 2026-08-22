@@ -161,7 +161,7 @@
   .legend .item { display: flex; align-items: center; gap: 4px; }
   .legend .swatch { width: 9px; height: 2.5px; border-radius: 2px; }
   .chart-wrap { flex: 1; min-height: 0; }
-  svg.chart { width: 100%; height: 100%; display: block; overflow: visible; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; }
+  svg.chart { width: 100%; height: 100%; display: block; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); border-radius: 2px; }
   .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
   .zero-line { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
   .axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
@@ -639,6 +639,35 @@ function buildCalibrationFromEntries(entries) {
   };
 }
 
+// Renders a calibration object (see buildCalibrationFromEntries()) as a
+// standalone .h file: a plain struct definition plus the measured table
+// as a static const array -- pulse widths in microseconds, angles in
+// hundredths of a degree, ascending from 0 at the low-pulse endpoint.
+// Self-contained (no external #include beyond the standard library), so
+// it drops straight into any C/C++ project and is directly readable --
+// no special macro needed to pull a value back out of it.
+function buildCalibrationHeader(cal) {
+  const rows = cal.points
+    .map(p => `  { ${p.pulseUs}, ${p.angleCentideg} },`)
+    .join("\n");
+  return `// Servo calibration table -- ${cal.points.length} points, direction-averaged
+// Pulse range ${cal.minPulseUs}-${cal.maxPulseUs}us, stroke 0-${cal.maxAngleDeg.toFixed(2)}deg
+// Generated ${new Date().toISOString()}
+
+#pragma once
+#include <stdint.h>
+
+struct CalPoint {
+  uint16_t pulseUs;
+  int16_t  angleCentideg;   // hundredths of a degree, e.g. 9000 = 90.00 deg
+};
+
+static const CalPoint SERVO_CAL_TABLE[] = {
+${rows}
+};
+`;
+}
+
 function finishCalibration() {
   calRunning = false;
   if (rawTableEntries.some(e => e === null)) {
@@ -752,10 +781,10 @@ el("btn-export").onclick = async () => {
     requireConnected();
     if (!calibration) throw new Error("Not calibrated yet.");
     const fetched = await fetchTableForExport();
-    const blob = new Blob([JSON.stringify(fetched, null, 2)], { type: "application/json" });
+    const blob = new Blob([buildCalibrationHeader(fetched)], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `servo_calibration_${Date.now()}.json`;
+    a.download = `servo_calibration_${Date.now()}.h`;
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (e) { appendLog("# " + e.message); }
