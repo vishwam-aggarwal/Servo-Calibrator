@@ -116,13 +116,13 @@ application code.
   vs. AS5600-measured actual, live — velocity's "actual" trace comes
   straight from the firmware's own encoder-derivative measurement, not a
   client-side numeric differentiation.
-- **See the table's improvement, interactively**: a live toggle switches
+- **See the table's improvement, interactively**: a toggle switches
   between the plain 2-point linear formula and the just-calibrated
-  20-point table — mid-move, without touching whatever's currently
-  running — and the error chart's line is colored by which model was
-  active, next to a running mean-error-per-model comparison, so the
-  improvement is something you watch happen, not a number you take on
-  faith.
+  20-point table (at rest only — like every other command, `MODEL` is
+  rejected while a move is actively running) — and the error chart's
+  line is colored by which model was active, next to a running
+  mean-error-per-model comparison, so the improvement is something you
+  watch happen, not a number you take on faith.
 
 ## How it works
 
