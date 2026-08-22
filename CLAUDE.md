@@ -1148,6 +1148,28 @@ real hardware: `RAWSWEEP ...` now genuinely returns `ERR UNKNOWN_CMD`
 rather than just being hidden from the UI, and `CAL`/`GO` still complete
 cleanly afterward (40/40 table points, `GO` accepted).
 
+**A real algorithm bug, caught by direct correction**: the fine pass was
+never actually supposed to unconditionally walk its entire fixed
+`CAL_FINE_MARGIN_US` margin (20 steps) regardless of what it found along
+the way — that "sweep straight through a stall" behavior, despite its
+own confident in-code justification, was not the algorithm actually
+agreed on. The real spec, restated directly: center → coarse down,
+back off 100µs once the edge is found → fine down until *that* edge is
+found (same detection, same sensitivity as coarse, not more lenient) →
+center → coarse up, back off 100µs → fine up until found → record the
+table from the up edge down to the low edge, then reverse (low back up
+to high), averaging the two. `STATE_CAL_DOWN_WAIT`/`STATE_CAL_UP_WAIT`'s
+fine branches now stop on the exact same condition as their coarse
+branches (`spinRecovered || stepDeltaStall || stepDeltaAnomaly ||
+stepDeltaReversed`) instead of only reversed/anomaly; `CAL_FINE_SWEEP_STEPS`
+is now a safety cap for if the edge is never found within the margin,
+not the normal way the pass ends. Verified on real hardware: the down
+side's fine pass stopped after 14 of the old fixed 20 steps; the up
+side stopped after just 1 (the coarse pass's last step already landed
+very close to the true edge) — both genuinely edge-triggered now, not
+exhausting the margin every time. Table build kicked off correctly
+afterward with sensible values.
+
 ## Requirements & dependencies
 
 Same as documented in the [README](README.md) — `ServoCalibrator_Companion`
