@@ -16,6 +16,10 @@ The fix itself isn't exotic — it's a lookup table. Instead of one straight lin
 
 ## The bench
 
+![The physical test jig: a Miuzei 25kg Servo (left, red) and an MG90D with the AS5600 magnetic encoder mounted directly on its output shaft (right), both bolted to a 3D-printed bracket, wired to an Arduino Nano clone on a screw-terminal breakout.](/images/your-servo-is-lying-to-you/test-jig.jpg)
+
+*The actual rig, one unit at a time: a Miuzei 25kg Servo on the left, an MG90D with the AS5600 mounted on it on the right, an Arduino Nano (CH340 clone) doing the driving.*
+
 Nine servos, three families — a Miuzei 25kg Servo, a knockoff MG996R, and an MG90D, three units each — went through the same protocol: a direction-averaged fine sweep against the AS5600 as ground truth, then thousands of independent accuracy trials. Every trial picked a random target angle *and* a random model independently, computed that model's predicted pulse, physically commanded it, waited a full second, and measured the real resulting angle. Target and model are drawn independently on purpose — an earlier pass through this data paired them, and it quietly let a bad model borrow a good model's positioning within the same round. Decoupling them was the difference between a flattering result and a true one.
 
 55,029 independent trials, six models compared per servo (the naive 2-point linear formula, plus 10/20/30/40/50-point lookup tables), across every unit — not a residual against the calibration curve that produced the table in the first place.
