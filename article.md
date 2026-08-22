@@ -152,28 +152,28 @@ A pan/tilt camera mount can absorb a degree of error and nobody notices the hori
 
 <div class="chart-figure">
 <p class="chart-title">End-effector drift radius: naive linear model vs. calibrated table, three-joint arm</p>
-<svg viewBox="0 0 780 300" role="img" aria-label="Diagram of a three-joint arm with two circles at the end effector showing positional drift radius, roughly 8.4 millimeter radius for the naive linear model versus 2.7 millimeter radius for a calibrated table">
-<rect x="30" y="240" width="60" height="14" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5"/>
-<circle cx="60" cy="232" r="11" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
-<line x1="60" y1="232" x2="210" y2="170" stroke="var(--text-faint)" stroke-width="2"/>
-<text x="130" y="192" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">120mm</text>
-<circle cx="210" cy="170" r="9" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
-<line x1="210" y1="170" x2="340" y2="120" stroke="var(--text-faint)" stroke-width="2"/>
-<text x="270" y="137" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">120mm</text>
-<circle cx="340" cy="120" r="8" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
-<line x1="340" y1="120" x2="470" y2="88" stroke="var(--text-faint)" stroke-width="2"/>
-<text x="405" y="97" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="middle">120mm</text>
-<circle cx="470" cy="88" r="46" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-dasharray="5 4"/>
-<circle cx="470" cy="88" r="17" fill="none" stroke="var(--series-1)" stroke-width="2.5"/>
-<circle cx="470" cy="88" r="3" fill="var(--text)"/>
-<line x1="470" y1="88" x2="511.7" y2="68.6" stroke="var(--series-2)" stroke-width="1.5"/>
-<line x1="511.7" y1="68.6" x2="580" y2="40" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
-<text x="586" y="38" font-family="var(--font-mono)" font-size="11" fill="var(--series-2)" text-anchor="start">radius &#8776; 8.4mm</text>
-<text x="586" y="53" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)" text-anchor="start">linear2</text>
-<line x1="470" y1="88" x2="486.4" y2="83.6" stroke="var(--series-1)" stroke-width="1.5"/>
-<line x1="486.4" y1="83.6" x2="580" y2="110" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
-<text x="586" y="108" font-family="var(--font-mono)" font-size="11" fill="var(--series-1)" text-anchor="start">radius &#8776; 2.7mm</text>
-<text x="586" y="123" font-family="var(--font-mono)" font-size="10" fill="var(--text-faint)" text-anchor="start">table20</text>
+<svg viewBox="0 0 780 340" role="img" aria-label="Diagram of a three-joint arm with two circles at the end effector showing positional drift radius, roughly 8.4 millimeter radius for the naive linear model versus 2.7 millimeter radius for a calibrated table">
+<rect x="40" y="290" width="64" height="15" fill="var(--bg-raised)" stroke="var(--border)" stroke-width="1.5"/>
+<circle cx="72" cy="282" r="13" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
+<line x1="72" y1="282" x2="300" y2="210" stroke="var(--text-faint)" stroke-width="2.5"/>
+<text x="186" y="238" font-family="var(--font-mono)" font-size="12.5" fill="var(--text-faint)" text-anchor="middle">120mm</text>
+<circle cx="300" cy="210" r="11" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
+<line x1="300" y1="210" x2="500" y2="150" stroke="var(--text-faint)" stroke-width="2.5"/>
+<text x="400" y="172" font-family="var(--font-mono)" font-size="12.5" fill="var(--text-faint)" text-anchor="middle">120mm</text>
+<circle cx="500" cy="150" r="10" fill="var(--bg-raised)" stroke="var(--accent)" stroke-width="2.5"/>
+<line x1="500" y1="150" x2="630" y2="108" stroke="var(--text-faint)" stroke-width="2.5"/>
+<text x="565" y="121" font-family="var(--font-mono)" font-size="12.5" fill="var(--text-faint)" text-anchor="middle">120mm</text>
+<circle cx="630" cy="108" r="52" fill="none" stroke="var(--series-2)" stroke-width="2.5" stroke-dasharray="6 5"/>
+<circle cx="630" cy="108" r="20" fill="none" stroke="var(--series-1)" stroke-width="3"/>
+<circle cx="630" cy="108" r="3.5" fill="var(--text)"/>
+<line x1="630" y1="108" x2="677.5" y2="86.8" stroke="var(--series-2)" stroke-width="1.75"/>
+<line x1="677.5" y1="86.8" x2="700" y2="58" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="706" y="56" font-family="var(--font-mono)" font-size="13" fill="var(--series-2)" text-anchor="start">radius &#8776; 8.4mm</text>
+<text x="706" y="73" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="start">linear2</text>
+<line x1="630" y1="108" x2="649.4" y2="103.2" stroke="var(--series-1)" stroke-width="1.75"/>
+<line x1="649.4" y1="103.2" x2="700" y2="140" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="706" y="138" font-family="var(--font-mono)" font-size="13" fill="var(--series-1)" text-anchor="start">radius &#8776; 2.7mm</text>
+<text x="706" y="155" font-family="var(--font-mono)" font-size="11" fill="var(--text-faint)" text-anchor="start">table20</text>
 </svg>
 <div class="chart-legend">
 <span><span class="swatch" style="background: var(--series-1);"></span>Calibrated (table20)</span>
