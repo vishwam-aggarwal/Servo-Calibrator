@@ -1,7 +1,7 @@
 /*
   ServoCalibrator_Companion
 
-  This IS the ServoCalibrator.html companion firmware -- as of 2026-08-21,
+  This IS the website/app.html companion firmware -- as of 2026-08-21,
   the version living here is the FSM redesign originally developed under
   a separate `ServoAutoCalibrator/` folder (see CLAUDE.md's own history
   for the full design story: active spin-recovery, coarse+fine stall-scan
@@ -21,7 +21,7 @@
   SQUARE/SINE generators the older companion firmware here used to have).
   Every tick, regardless of state, streams a TELEM line (see
   printTelemetry()) reporting both the trajectory's current target and
-  the actual measured shaft state, for ServoCalibrator.html to plot live.
+  the actual measured shaft state, for website/app.html to plot live.
 
   Runs on one fixed-rate tick (see TICK_INTERVAL_MS below); the state
   machine itself is a single switch/case in loop(), one case per enum
@@ -32,7 +32,7 @@
   telemetry -- happens the same way regardless of which state is active.
 
   Real protocol differences from the old companion firmware that
-  ServoCalibrator.html has to account for (see that file's own comments
+  website/app.html has to account for (see that file's own comments
   for how): CAL acknowledges immediately and streams progress
   asynchronously rather than blocking on one final reply; GETTABLE
   re-streams the current session's already-built calTable on request but
@@ -582,7 +582,7 @@ unsigned long trajStartMs = 0;    // millis() at the moment STATE_TRAJ_PLAN plan
 // anywhere else -- it holds at wherever the most recent move was headed
 // (0, i.e. the boot reference, before the first GO ever runs), the same
 // way a real setpoint would, so the html app's position-error chart
-// (actual - target, matching this project's existing ServoCalibrator.html
+// (actual - target, matching this project's existing website/app.html
 // convention) reads a small, meaningful settling error after a move
 // finishes rather than snapping to some arbitrary stale or undefined
 // value. trajTargetVelCentidegPerSec, in contrast, IS explicitly zeroed
@@ -600,7 +600,7 @@ int32_t trajTargetVelCentidegPerSec = 0;
 // current target and the actual measured shaft state, in centidegrees/
 // centideg-per-second, so the html app can plot position and velocity
 // directly and then compute + plot position error (actual - target,
-// matching this project's existing ServoCalibrator.html convention)
+// matching this project's existing website/app.html convention)
 // itself -- one fewer thing this firmware needs to get right, since the
 // html app already has both numbers it needs to do that subtraction on
 // its own.

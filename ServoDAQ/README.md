@@ -7,7 +7,7 @@ A second, unrelated tool in this repo — a companion firmware
 characterization/article-testing work — comparing a naive single-step
 stall-detection sweep against a smarter coarse+fine, rate-based
 `find_range()` on real hardware — and is deliberately kept separate from
-`ServoCalibrator.html`/`ServoCalibrator_Companion`: that tool stays
+`website/app.html`/`ServoCalibrator_Companion`: that tool stays
 untouched, this kind of exploratory work goes in its own files instead.
 
 No zero reference, no model, no calibration table — that's the host's
