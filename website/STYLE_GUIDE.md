@@ -116,21 +116,80 @@ draft: true
 - Rendered at `/tools/<id>/` in the site's **wide** column (see §3) —
   this is a landing page, not continuous prose.
 - The page template supplies the back-link, the tag row + status badge
-  (from `tags`/`status`), and a fixed button row (**Launch** →
-  `/tools/<id>/app/`, **View on GitHub** → `repo`) automatically. Your
-  markdown body is just the content between those: what the tool does,
-  wiring/setup, safety notes, how to get it running. Don't add your own
-  "Launch"/"View on GitHub" buttons or repeat the tag/status badges
-  inside the body.
+  (from `tags`/`status`), a fixed button row (**Launch** →
+  `/tools/<id>/app/`, **View on GitHub** → `repo`), and a comment section
+  (bug reports/feedback — every tool page gets one, same as articles)
+  automatically. Your markdown body is just the content between the
+  button row and the top: what the tool does, wiring/setup, safety notes,
+  how to get it running. Don't add your own "Launch"/"View on GitHub"
+  buttons, comment section, or repeat the tag/status badges inside the
+  body.
 
 ### `app.html`
 
 The tool's actual web app — not templated by the site at all, served
 byte-for-byte as a static file at `/tools/<id>/app/`. It's a separate,
-self-contained page (its own `<html>`, its own styling); it does **not**
-need to match this style guide's look. Keep it self-contained (no
-external script/asset dependencies) so it works when served as a bare
-static file.
+self-contained page (its own `<html>`, its own `<style>`) — but **it
+must still look like it belongs to the site**: same color tokens, same
+fonts, same component shapes (2px corners, the same card/button/badge
+treatment). A visitor clicking "Launch" should never feel like they left
+for a different, unrelated product. Concretely:
+
+- Same single dark theme, no light/dark toggle — copy the color values
+  below into the app's own `:root` (give your existing variable *names*
+  these values; don't rename variables your script already references).
+- Same fonts, loaded via the same Google Fonts request as the rest of
+  the site (the one exception to "no external dependencies" — this one
+  external stylesheet request is expected and fine):
+
+  ```html
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+  />
+  ```
+
+  Body copy → `"Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`.
+  Headings → `"Big Shoulders Display", "Archivo", sans-serif`, bold, uppercase.
+  Labels/mono/code/readouts → `"IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace`.
+
+- Same color values (site tokens on the left, in case your app's own
+  variable names differ):
+
+  ```css
+  --bg: #102C44;            /* page background */
+  --bg-raised: #17395A;     /* card backgrounds */
+  --bg-raised-alt: #1D4266; /* nested surfaces: inputs, tabs, chart plot areas */
+  --text: #F3F8FC;
+  --text-dim: #A9C7DE;
+  --text-faint: #6E93B1;
+  --border: #2C5678;
+  --border-strong: #3F7096;
+  --accent: #F2A93C;        /* primary buttons, focus rings, the "good/naive-baseline" data series */
+  --danger: #EF6F6C;        /* destructive/abort actions, error states */
+  --series-1: #8FD3F4;      /* a second data-series color, distinct from --accent */
+  --shadow: 0 0 0 1px rgba(230,242,250,0.06), 0 14px 32px -16px rgba(4,12,20,0.65);
+  ```
+
+  If the app needs a third or fourth distinct data-series color beyond
+  `--accent`/`--series-1`, pick something that reads clearly against the
+  dark surfaces above (a teal/green around `#4FD8B0` has worked well) —
+  it doesn't need to be a token already in this list.
+- 2px border-radius everywhere (cards, buttons, inputs, badges/pills —
+  not a fully-rounded pill shape), `--shadow` on cards and buttons,
+  matching the rest of the site's "sharp, technical" look rather than a
+  soft rounded dashboard aesthetic.
+- Reskin only — don't restructure the app's own layout, class names, or
+  script logic to do this. If colors are already threaded through the
+  app as `var(--whatever-name)` (in CSS *and* in any inline
+  `style="..."` attributes or chart-drawing script), you only need to
+  change the values each name resolves to, exactly like `.chart-figure`
+  on the main site remaps `--series-1`/`--text`/etc. to a different
+  palette without touching any SVG markup. If colors are hardcoded
+  instead, introduce named variables for them first, then set the
+  values above.
 
 ### ⚠️ The draft default is "published," not "draft"
 
@@ -318,7 +377,11 @@ automatically.
 - [ ] No blank line inside any raw HTML/SVG block
 - [ ] Images live in `website/images/`, referenced by their website URL
       (`/images/<id>/<filename>`), not a repo-relative path
-- [ ] `tool.md` doesn't re-implement the tag row, status badge, or
-      Launch/GitHub buttons — those come from frontmatter automatically
+- [ ] `tool.md` doesn't re-implement the tag row, status badge,
+      Launch/GitHub buttons, or comment section — those come from the
+      template automatically
+- [ ] `app.html` uses the site's color tokens/fonts/2px-radius look
+      (§2's `app.html` section) — it shouldn't look like a different
+      product once you click Launch
 - [ ] This repo's `website/STYLE_GUIDE.md` matches the canonical copy in
       the `vishwamaggarwal.com` repo (diff them if unsure)

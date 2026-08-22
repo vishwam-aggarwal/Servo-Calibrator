@@ -1458,3 +1458,40 @@ already used `var(--token)` colors and `role="img"`/`aria-label`, tool.md
 already left the tag row/status badge/buttons to the template) — no
 content changes needed, just the new file. See the website repo's own
 `CLAUDE.md` for the full reasoning.
+
+## website/app.html reskinned to match the site's blueprint theme (2026-08-22)
+
+The user reviewed the live tool page and flagged that the app (once you
+click Launch) still looked like a completely different product from the
+rest of vishwamaggarwal.com -- fair: it shipped with its own light-by-
+default, blue/orange/green SaaS-dashboard palette and system fonts,
+unrelated to the site's dark "blueprint" theme. Reskinned `:root`'s
+values (page/surface/text/border colors, the `--down`/`--up`/`--ref`
+data-series colors, `--good`/`--warn`/`--crit` status colors) to the
+site's exact hex values, swapped system fonts for the same Google Fonts
+the site uses (Big Shoulders Display / Archivo / IBM Plex Mono, loaded
+via the same font request), changed border-radius from 4-5px/a fully
+rounded pill to the site's flat 2px everywhere, and added the site's
+`--shadow` treatment to cards/buttons. Deliberately a reskin, not a
+rewrite: every CSS variable *name* the script/markup already reference
+(`--down`, `--up`, `--ref`, etc.) is unchanged, only the values --
+exactly the same trick `.chart-figure` uses on the main site to remap
+chart colors without touching any SVG markup. Also dropped the
+`prefers-color-scheme`/`data-theme` light-mode variant entirely, since
+the site itself is deliberately single-theme.
+
+Also fixed the header eyebrow, which still read "Universal-Motor-
+Interface + Universal-Trajectory-Interface companion tool" -- stale
+since the 2026-08-22 01:11 entry above established there's no real UMI
+dependency; now just names Universal-Trajectory-Interface.
+
+Verified by serving `website/` locally and loading `app.html` in a
+real browser (`claude-in-chrome`) -- confirmed the new palette/fonts
+render correctly, disabled-card dimming still works, and no console
+errors, though (as before) this didn't exercise an actual live
+`navigator.serial` connection.
+
+**This session's new website-wide convention** (see the website repo's
+`STYLE_GUIDE.md`, `website/STYLE_GUIDE.md` here): every tool's
+`app.html`, in every repo, is expected to match the site's palette/fonts
+this same way going forward -- not a one-off fix just for this tool.
