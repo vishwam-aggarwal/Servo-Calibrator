@@ -281,13 +281,17 @@ Firefox or Safari.
   It stops advancing within a small margin of first detecting no motion,
   so it only grinds against a stop briefly — but it is intentionally
   doing that, twice (once per direction), by design.
-- A hard pulse-width safety ceiling (80–3100µs, fixed in firmware) exists
+- A hard pulse-width safety ceiling (80–2912µs, fixed in firmware) exists
   as a fail-safe in case stall detection doesn't trigger for some reason
   (e.g. an encoder fault) — a scan hitting it ends the run without a
   usable table, rather than silently accepting a bad range. If that
   happens to you, it likely means your servo's real range is wider than
   this default too — widen `ABS_FLOOR_US`/`ABS_CEIL_US` in the firmware
-  and reflash.
+  and reflash. **Don't raise `ABS_CEIL_US` past 2912µs**: the AVR `Servo`
+  library encodes `attach()`'s bounds in a signed `int8_t`, and anything
+  higher silently overflows and wraps to a *lower* effective ceiling than
+  before (2912 is the real representable max — see `CLAUDE.md`'s
+  2026-08-25 entry for how this was found and what it cost).
 
 ## Serial protocol reference
 

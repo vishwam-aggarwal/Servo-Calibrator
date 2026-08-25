@@ -61,8 +61,26 @@
 // attach() already passes
 // these) against the same servo the same session proved it: smooth,
 // unremarkable motion the whole way down to ~260-330us.
+// ABS_CEIL_US must also stay inside what Servo::attach() can actually
+// encode: internally it stores (MAX_PULSE_WIDTH - max)/4 in a signed
+// int8_t (Servo.h: MAX_PULSE_WIDTH 2400), so any ceiling above
+// 2400 + 4*127 = 2908 (2912 rounds cleanly to the same 4us step Servo.cpp
+// itself uses) silently overflows and wraps -- found here by tracing a
+// real discrepancy against Servo_Test.ino (a sibling sketch on this same
+// hardware that deliberately caps at 2912us for exactly this reason, see
+// its own header comment): the old value here, 3100, computes
+// (2400-3100)/4 = -175, which doesn't fit in int8_t and wraps to 81,
+// giving an ACTUAL enforced ceiling of 2400-81*4 = 2076us -- every
+// commanded pulse above ~2076us was silently rewritten to 2076us the
+// whole time, indistinguishable from the servo genuinely stalling right
+// there. That's exactly where this scan's own weakening-fraction
+// detection had been finding its "edge" -- not a real mechanical limit,
+// the actuator was receiving an unchanging pulse no matter what was
+// requested. ServoDAQ_Companion.ino has the identical 3100 value and is
+// affected the same way -- not fixed here since it's a separate sketch,
+// see the 2026-08-25 CLAUDE.md entry for the full finding.
 #define ABS_FLOOR_US 80
-#define ABS_CEIL_US 3100
+#define ABS_CEIL_US 2912
 #define CENTER_US 1500          // pulse commanded at the start of calibration
 #define CAL_SETTLE_TIMEOUT_MS 3000   // exit route 1 of every waiting state: give up if it never settles
 #define CAL_SETTLE_WINDOW_SAMPLES 10 // N -- how many recent raw readings the running average is over (to tune later)
