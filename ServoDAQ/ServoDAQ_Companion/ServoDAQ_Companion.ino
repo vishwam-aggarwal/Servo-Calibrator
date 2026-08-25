@@ -102,8 +102,27 @@ const int SERVO_PIN = A3;
 
 // Hard safety fence only -- guards against an absurd pulse width
 // regardless of what the host asks for.
+//
+// ABS_CEIL_US must also stay inside what Servo::attach() can actually
+// encode: internally it stores (MAX_PULSE_WIDTH - max)/4 in a signed
+// int8_t (Servo.h: MAX_PULSE_WIDTH 2400), so any ceiling above
+// 2400 + 4*127 = 2908 (2912 rounds cleanly to the same 4us step Servo.cpp
+// itself uses) silently overflows and wraps. The old value here, 3100,
+// computed (2400-3100)/4 = -175, which doesn't fit in int8_t and wraps to
+// 81, giving an ACTUAL enforced ceiling of 2400-81*4 = 2076us -- every
+// commanded pulse above ~2076us was silently rewritten to 2076us the
+// whole time, indistinguishable from the servo genuinely stalling right
+// there. Found by comparing this project's own find_range() output
+// against Servo_Test.ino (a sibling sketch on the same hardware that
+// deliberately caps at 2912us for exactly this reason) and tracing the
+// ~2076us "edge" both ServoDAQ and ServoCalibrator_Companion kept
+// reporting back to this overflow -- not a real mechanical limit. See
+// ServoCalibrator_Companion.ino's own ABS_CEIL_US comment and the
+// 2026-08-25 CLAUDE.md entry for the full finding. This affects every
+// max_pulse_us this project has ever recorded via find_range() on a
+// servo whose true range exceeds ~2076us.
 const int ABS_FLOOR_US = 80;
-const int ABS_CEIL_US  = 3100;
+const int ABS_CEIL_US  = 2912;
 const int CENTER_US    = 1500;
 
 // Tick rate for the whole program -- long enough to comfortably contain

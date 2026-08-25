@@ -526,3 +526,65 @@ identical scale via a shared `syncAxes()` helper (synced per-row where
 rows carry different measurements, e.g. calibration's curve/slope/zoom)
 so units are directly visually comparable instead of each silently
 auto-scaling to its own range.
+
+## `ABS_CEIL_US` silently capped every unit's max pulse in the whole study (2026-08-25)
+
+Real bug, found by cross-checking against a third, independent tool
+(`Servo_Test.ino`, a minimal standalone sketch outside this repo) on
+the same bench servo: `find_range()` and `ServoCalibrator_Companion`'s
+own `CAL` both reported a max edge around 2070–2085µs, while
+`Servo_Test.ino` found a real edge at 2670µs on the identical hardware.
+First guess (the shared rate-based edge detection, `scan_until_weak()`,
+being too conservative) didn't survive testing —
+`CAL_WEAKENING_FRACTION` at 0.10 instead of 0.35 barely moved the
+result (2085µs), which was the real clue: the servo's *actual* commanded
+position had stopped changing at all past ~2076µs, no matter what
+larger pulse was written.
+
+Root cause: `ABS_CEIL_US` (`servo_daq.py` and `ServoDAQ_Companion.ino`
+both had it at `3100`) gets passed straight to `Servo::attach()`, which
+encodes the ceiling internally as `(MAX_PULSE_WIDTH - max)/4` in a
+**signed `int8_t`** (`Servo.h`: `MAX_PULSE_WIDTH` 2400) — `(2400-3100)/4
+= -175` doesn't fit in `int8_t` and silently wraps to 81, giving an
+*actual* enforced ceiling of `2400 - 81*4 = 2076µs`. Every commanded
+pulse above ~2076µs was silently rewritten to 2076µs the whole time —
+indistinguishable from a genuine stall, which is exactly what
+`find_range()` dutifully (and correctly, given the input it was
+actually receiving) reported. `Servo_Test.ino` never hit this because
+its own author had already worked out the library's real representable
+max (2912µs) and capped itself there deliberately.
+
+**This bug was live for the entire 9-unit study.** Looking back at
+every unit's reported max pulse (see the top-level `CLAUDE.md`'s 9-unit
+table): every single one clusters at 2065–2080µs regardless of servo
+family or gear ratio — not what nine independent mechanical limits
+should look like. That lines up exactly with users having reported
+type1/type3 (rated ~270°) consistently measuring short of spec, and
+type2 (rated ~180°) measuring short too.
+
+**Fixed**: `ABS_CEIL_US` changed from 3100 to 2912 in both
+`ServoDAQ_Companion.ino` and `servo_daq.py` (kept in sync by hand per
+`servo_daq.py`'s own docstring), and identically in
+`ServoCalibrator_Companion.ino` (a separate tool in this repo with the
+same bug — see the main `CLAUDE.md`). `CAL_WEAKENING_FRACTION` was
+reverted to its original 0.35; it was never the problem.
+
+**Verified on two units so far**, both on real hardware:
+- `type1_unit3` (Miuzei 25kg Servo): 325–2075µs (236.2°) →
+  **325–2655µs (313.1°)**. A full 3h re-run (5970 trials) on the
+  corrected range found the same qualitative result as before the fix —
+  `linear2` still clearly worst (now by an even larger margin, since a
+  straight line fits worse over a wider real range), table models still
+  cluster with diminishing returns past ~10–20 points.
+- `type3_unit3` (MG90D): 340–2075µs (229.8°) → **305–2620µs (308.2°)**
+  (smoke-tested only so far, 637 trials, same shape).
+
+**Not yet done**: re-running the other 7 units. Every range/stroke
+number in `CLAUDE.md`'s 9-unit table, and `website/data.md`'s per-unit
+charts, still reflect the pre-fix, capped measurements except for
+`type1_unit3`'s range-finding chart (corrected as of this entry — see
+`website/data.md`'s own top-of-page caveat). The study's central,
+qualitative conclusion — an N-point table beats the naive 2-point
+linear formula, with rapidly diminishing returns past ~10–20 points —
+held up on both re-verified units under the real, wider range; only the
+absolute range/stroke numbers were wrong.

@@ -23,7 +23,12 @@ import serial
 # config file between the two, so these have to be kept in sync by hand.
 CENTER_US    = 1500
 ABS_FLOOR_US = 80
-ABS_CEIL_US  = 3100
+# Must match ServoDAQ_Companion.ino's own ABS_CEIL_US exactly -- was 3100,
+# which the AVR Servo library's int8_t-encoded attach() bound silently
+# overflows and wraps to an actual enforced ceiling of ~2076us (see that
+# .ino's own ABS_CEIL_US comment). 2912 is the real representable max;
+# kept in sync here by hand per this module's own docstring.
+ABS_CEIL_US  = 2912
 
 
 class NotSettledError(RuntimeError):
