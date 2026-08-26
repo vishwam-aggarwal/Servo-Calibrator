@@ -166,11 +166,12 @@ Two pieces:
 - **`website/app.html`** — the app. Connection, calibration
   triggering/export, and the three live charts all live here; the
   firmware doesn't know anything about SVG or the exported `.h` file's
-  format. Because the
-  firmware's own calibration table isn't re-anchored to a 0° low
-  endpoint (see [Serial protocol reference](#serial-protocol-reference)),
-  the app does that framing itself, client-side, so the UI still
-  presents the established physical `[0, maxAngleDeg]` convention.
+  format. The firmware's own calibration table is re-anchored to a 0°
+  low endpoint on-device (see
+  [Serial protocol reference](#serial-protocol-reference)), so the app
+  no longer does any of that framing itself — it just plots/sends what
+  the firmware already reports in the established physical
+  `[0, maxAngleDeg]` convention.
 
 ## The calibration table & Universal-Motor-Interface
 
@@ -183,9 +184,13 @@ It's deliberately shaped like UMI's own `CalPoint` — same fields, same
 angle↔pulse interpolation algorithm — but not identical (`int32_t`
 angles here vs. UMI's `int16_t`, to handle this firmware's unbounded
 multi-turn position tracking) and lives entirely in `ServoCalibrator_Companion.ino`
-itself. Export (see [below](#export)) generates a standalone `.h` file
-with a plain `CalPoint` struct and populated array in that exact shape,
-ready to hand straight to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s
+itself. The table is also normalized to the same `[0, maxAngleDeg]`
+frame UMI's `validateCalTable()` expects (index 0 at exactly 0°,
+strictly ascending) — done on-device, once, right when a calibration
+finishes, so `GETTABLE`'s own wire output already satisfies it with no
+client-side transform needed. Export (see [below](#export)) generates a
+standalone `.h` file with a plain `CalPoint` struct and populated array
+in that exact shape, ready to hand straight to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s
 table-accepting constructor overload by whatever *consuming* application
 installs this servo — that's where UMI actually comes in, downstream,
 not in building this tool. Physical testing
@@ -212,8 +217,8 @@ downloads it as a standalone `.h` file: a plain
 `struct CalPoint { uint16_t pulseUs; int16_t angleCentideg; }` — matching
 UMI's own `ServoCalibrationTable.h` field-for-field, though the file
 itself never mentions UMI — plus a populated
-`static const CalPoint SERVO_CAL_TABLE[]` array, already re-anchored to
-the app's own `[0, maxAngleDeg]` framing (see
+`static const CalPoint SERVO_CAL_TABLE[]` array, already in the firmware's
+own `[0, maxAngleDeg]` framing (see
 [How it works](#how-it-works)). It's a plain RAM array, not `PROGMEM` —
 directly readable with no special macro whether or not the consuming
 code ever touches UMI; add `PROGMEM` yourself if you want it in flash
@@ -307,7 +312,7 @@ story if you're diffing against an older version of this doc.
 | `ABORT` | `OK ABORT` \| `ERR ALREADY_IDLE` — cancels a calibration *or* a move; exempt from the busy-gate below |
 | `ACCEL <aMaxDegS2>` | `OK ACCEL` |
 | `VEL <vMaxDegS>` | `OK VEL` |
-| `POS <targetDeg>` | `OK POS` — **not range-checked server-side**; the app clamps client-side instead |
+| `POS <targetDeg>` | `OK POS` \| `ERR NOT_CALIBRATED` \| `ERR POS_RANGE` — range-checked server-side against `[0, maxAngleDeg]` (the app also checks client-side first, to fail fast without a round trip) |
 | `GO` | `OK GO` \| `ERR NOT_CALIBRATED` — starts a move to the most recently set `POS`, at the most recent `ACCEL`/`VEL` |
 | `MODEL LINEAR\|TABLE` | `OK MODEL` \| `ERR NOT_CALIBRATED` |
 | `GETTABLE` | `OK GETTABLE` \| `ERR NOT_CALIBRATED` — streams all 20 `TABLE` lines first (see below), *then* replies; no immediate ack the way `CAL`/`GO` get one |
@@ -328,18 +333,26 @@ reply to any pending command:
 the up-pass value is the final, direction-averaged one); the app detects
 completion by recognizing index 19 arriving *ascending* (immediately
 after index 18), since there's no dedicated "done" message. `angleCentideg`
-is a **raw** encoder reading relative to wherever the board happened to
-boot — not re-anchored so index 0 reads exactly 0° the way the old
-firmware's table was; the app reframes it client-side (see
-[How it works](#how-it-works)). `ERR` here is an asynchronous internal
-failure (e.g. a settle timing out), not a synchronous command rejection.
+in this **live, mid-calibration** stream is still a **raw** encoder
+reading relative to wherever the board happened to boot — normalization
+only happens once, in memory, right after both passes finish (see
+[How it works](#how-it-works)), so these in-flight lines are
+progress-only; the app doesn't build the final calibration from them
+any more, it just watches the index sequence for completion. `ERR` here
+is an asynchronous internal failure (e.g. a settle timing out), not a
+synchronous command rejection.
 
 `GETTABLE` streams the identical `TABLE` line shape, once per index,
 ascending — one entry per tick, oldest first, no down/up-pass repeat
 this time (it's just replaying the already-built table, not measuring a
-fresh one). The app tells the two apart by whether a calibration is
-actually running, not by the line shape itself, since it's the same
-either way.
+fresh one). Unlike the live stream above, `GETTABLE` always reflects the
+table *after* normalization — index 0 at exactly 0°, strictly ascending
+— since it's reading `calTable` at rest, not mid-scan. The app tells a
+live-CAL `TABLE` line apart from a `GETTABLE` one by whether a
+calibration is actually running, not by the line shape itself (same
+shape either way), and always calls `GETTABLE` once calibration
+completes to get the authoritative normalized table rather than trusting
+what it watched go by live.
 
 Once calibrated, telemetry streams every tick (~50Hz), unconditionally,
 regardless of state:

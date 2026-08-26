@@ -40,10 +40,24 @@
   port always reboots the board via DTR, wiping calTable, so a fresh CAL
   is still required every session) and no IMPORT at all; GO takes its
   target/limits from separate ACCEL/VEL/POS commands rather than one
-  combined call; and calTable's angleCentideg values are raw encoder
-  readings relative to wherever the board happened to boot, NOT
-  re-anchored so index 0 reads exactly 0 the way the old firmware's table
-  was.
+  combined call.
+
+  calTable's angleCentideg values ARE re-anchored, but only once, at the
+  moment a CAL run's table finishes building (STATE_CAL_TABLE_WAIT) --
+  calOffsetCentideg/calSign are computed then from the raw encoder
+  readings the scan actually measured, and applied to the whole table in
+  place, so calTable[0] always reads exactly 0 and the table always
+  ascends toward maxAngleDeg regardless of mounting orientation -- the
+  same [0, maxAngleDeg] physical frame this file's own header used to
+  describe as an app.html-only concern (see website/app.html's history in
+  CLAUDE.md), now established on-device instead, so GETTABLE's own output
+  is directly usable by UMI's ServoCalibrationTable without any client
+  transform. currentAngleDeg()/printTelemetry()/POS all read and write
+  that same normalized frame via toNormalizedCentideg() once calibrated
+  (identity beforehand). The live TABLE stream printed DURING a CAL run's
+  two passes is deliberately NOT retroactively corrected -- those lines
+  stay raw/progress-only; only calTable at rest (and hence a later
+  GETTABLE) reflects the normalized values.
 */
 
 #define LOOP_FREQUENCY_HZ 50    // fixed tick rate -- every timing constant below derives from this
@@ -587,6 +601,14 @@ bool useTable = false;    // false = linear (2-point) model, true = the full cal
 bool isCalibrated = false;   // true once STATE_CAL_TABLE_WAIT finishes the table -- CMD_GO
                               // is rejected (ERR NOT_CALIBRATED) until this is true
 
+// The raw-to-normalized transform applied once, right when a CAL run's
+// table finishes building (STATE_CAL_TABLE_WAIT) -- see
+// toNormalizedCentideg() below. Identity (0, +1) until then, which keeps
+// every normalized-frame reader (currentAngleDeg(), printTelemetry())
+// safe to call before any calibration has completed.
+int32_t calOffsetCentideg = 0;   // raw angleCentideg of the low-pulse (index 0) endpoint
+int8_t  calSign = 1;             // +1 or -1, whichever makes angle ascend with pulse
+
 TrapezoidalProfile trajProfile;   // planned once by STATE_TRAJ_PLAN, evaluated every tick by
                                    // STATE_TRAJ_STREAM until it reports settled
 unsigned long trajStartMs = 0;    // millis() at the moment STATE_TRAJ_PLAN planned the move --
@@ -629,12 +651,17 @@ int32_t trajTargetVelCentidegPerSec = 0;
 // other uses (the calibration table, a GO move's planned start, the
 // scan's own edge-detection -- see filteredPosition's own comment).
 // actualCentideg comes from rawAngleCentideg() (totalCounts, not
-// filteredPosition); actualVelCentidegPerSec comes from encoderDerivative
-// (the raw per-tick delta computed once in loop() -- see its own
-// comment), which was already unfiltered even before this change: the
-// position filter's whole purpose is smoothing AS5600 quantization noise
-// for the *filtered* uses, so differencing an already-smoothed signal
-// would just reintroduce lag without removing any noise a second time.
+// filteredPosition), passed through toNormalizedCentideg() so it lands in
+// the same normalized frame as lastTrajTargetCentideg -- still unfiltered
+// (the offset/sign remap doesn't reintroduce any smoothing).
+// actualVelCentidegPerSec comes from encoderDerivative (the raw per-tick
+// delta computed once in loop() -- see its own comment), which was
+// already unfiltered even before this change: the position filter's
+// whole purpose is smoothing AS5600 quantization noise for the *filtered*
+// uses, so differencing an already-smoothed signal would just reintroduce
+// lag without removing any noise a second time. Only calSign (not the
+// offset -- a derivative already cancels any constant shift) needs to be
+// applied here, so actual velocity's direction matches actual position's.
 //
 // Deliberately its own wire format (TELEM, space-separated, printed
 // directly rather than through printMessage()) instead of folding into
@@ -643,8 +670,8 @@ int32_t trajTargetVelCentidegPerSec = 0;
 // logging, not a fixed-rate telemetry stream a chart wants to index by
 // wall-clock time.
 void printTelemetry() {
-  int32_t actualCentideg = rawAngleCentideg();
-  int32_t actualVelCentidegPerSec = (int32_t)(encoderDerivative * 36000L / 4096L * (long)LOOP_FREQUENCY_HZ);
+  int32_t actualCentideg = toNormalizedCentideg(rawAngleCentideg());
+  int32_t actualVelCentidegPerSec = (int32_t)(calSign * encoderDerivative * 36000L / 4096L * (long)LOOP_FREQUENCY_HZ);
   Serial.print(F("TELEM "));
   Serial.print(millis());
   Serial.print(' ');
@@ -940,6 +967,15 @@ int32_t rawAngleCentideg() {
   return (int32_t)(totalCounts * 36000L / 4096L);
 }
 
+// Raw encoder-frame centidegrees -> the normalized [0, maxAngleDeg]
+// physical frame calTable is stored in once a CAL run's table finishes
+// building (see STATE_CAL_TABLE_WAIT). calOffsetCentideg/calSign default
+// to (0, +1) -- identity -- until then, so this is safe to call at any
+// time, calibrated or not.
+int32_t toNormalizedCentideg(int32_t rawCentideg) {
+  return calSign * (rawCentideg - calOffsetCentideg);
+}
+
 // Streams one calTable entry over the wire, as "TABLE <idx> <pulseUs>
 // <angleCentideg>" -- shared by recordTableEntry() below (a genuinely new
 // reading, just measured) and STATE_GETTABLE_SEND (an existing entry from
@@ -1025,14 +1061,18 @@ uint16_t pulseForAngleCentideg(int32_t angleCentideg) {
   return interpolateTable(linearTable, 2, angleCentideg);
 }
 
-// Current shaft angle, in degrees -- same raw-AS5600-frame conversion
-// recordTableEntry() uses for calTable's own angleCentideg values (plain
-// degrees here instead of centidegrees, since this feeds q0 into
-// TrapezoidalProfile::plan(), which works in whatever unit the caller
-// gives it -- degrees, to match targetPositionDeg/velLimitDegPerSec/
-// accelLimitDegPerSec2).
+// Current shaft angle, in degrees, in the same normalized [0, maxAngleDeg]
+// frame calTable/targetPositionDeg live in (toNormalizedCentideg() --
+// identity pre-calibration). Deliberately NOT the same raw conversion
+// recordTableEntry() uses for calTable's own readings during a scan --
+// this feeds q0 into TrapezoidalProfile::plan(), which needs to start
+// from the same frame targetPositionDeg (the plan's destination) is
+// already in, or the planned move would be nonsense. Plain degrees here
+// instead of centidegrees, since that's what plan()/targetPositionDeg/
+// velLimitDegPerSec/accelLimitDegPerSec2 all use.
 float currentAngleDeg() {
-  return (float)filteredPosition * 360.0f / 4096.0f;
+  int32_t rawCentideg = (int32_t)(filteredPosition * 36000L / 4096L);
+  return (float)toNormalizedCentideg(rawCentideg) / 100.0f;
 }
 
 // Discards whatever's in the running-average window -- called whenever a
@@ -1118,10 +1158,14 @@ int tokenizeLine(char* line) {
 // housekeeping is what actually forces the state back to STATE_IDLE, so
 // every state gets the same abort handling instead of each one checking
 // serial itself. ABORT while already idle is rejected -- there's nothing
-// running to abort. ACCEL/VEL/POS each take one numeric argument (degrees,
-// deg/sec, deg/sec^2) and just update their own variable -- read by
-// STATE_TRAJ_PLAN whenever GO next plans a move, not applied retroactively
-// to one already streaming. MODEL LINEAR/TABLE switches useTable; anything
+// running to abort. ACCEL/VEL each take one numeric argument (deg/sec,
+// deg/sec^2) and just update their own variable -- read by STATE_TRAJ_PLAN
+// whenever GO next plans a move, not applied retroactively to one already
+// streaming. POS takes a target in the normalized [0, maxAngleDeg] frame
+// calTable is stored in (see toNormalizedCentideg()) -- rejected (ERR
+// NOT_CALIBRATED, or ERR POS_RANGE if out of [0, maxAngleDeg]) rather than
+// silently clamped, since maxAngleDeg isn't known until a calibration has
+// completed. MODEL LINEAR/TABLE switches useTable; anything
 // else is rejected. GO plans and starts a trajectory move to
 // targetPositionDeg -- rejected (ERR NOT_CALIBRATED) until isCalibrated.
 // GETTABLE replays the current session's already-built calTable back
@@ -1172,11 +1216,16 @@ void handleLine(char* line) {
       velLimitDegPerSec = atof(tok[1]);
       Serial.println(F("OK VEL"));
       break;
-    case CMD_POS:
+    case CMD_POS: {
       if (n != 2) { Serial.println(F("ERR USAGE")); break; }
-      targetPositionDeg = atof(tok[1]);
+      if (!isCalibrated) { Serial.println(F("ERR NOT_CALIBRATED")); break; }
+      float posArg = atof(tok[1]);
+      float maxAngleDeg = calTable[CAL_TABLE_POINTS - 1].angleCentideg / 100.0f;
+      if (posArg < 0.0f || posArg > maxAngleDeg) { Serial.println(F("ERR POS_RANGE")); break; }
+      targetPositionDeg = posArg;
       Serial.println(F("OK POS"));
       break;
+    }
     case CMD_MODEL:
       if (n != 2) { Serial.println(F("ERR USAGE")); break; }
       if (strcmp(tok[1], "LINEAR") == 0) {
@@ -1608,6 +1657,27 @@ void loop() {
             tableIndex++;
             changeState(STATE_CAL_TABLE_WRITE);
           } else {
+            // Both passes done -- calTable[0]/calTable[CAL_TABLE_POINTS-1]
+            // now hold their final (direction-averaged) raw readings.
+            // Normalize the whole table in place, once, right here: shift
+            // so the low-pulse endpoint reads exactly 0, and flip sign if
+            // needed so angle ascends with pulse regardless of mounting
+            // orientation -- same math website/app.html used to do
+            // client-side (buildCalibrationFromEntries()), now the single
+            // source of truth so GETTABLE's own output is directly usable
+            // by UMI's ServoCalibrationTable (validateCalTable() expects
+            // table[0].angleCentideg <= 0, strictly ascending, coverage up
+            // to maxAngleRad -- an unnormalized raw table doesn't satisfy
+            // that). The live TABLE stream already printed during both
+            // passes above is NOT retroactively corrected -- it stays raw/
+            // progress-only; GETTABLE (and calTable at rest from here on)
+            // is the authoritative normalized source.
+            calOffsetCentideg = calTable[0].angleCentideg;
+            int32_t calSpanCentideg = calTable[CAL_TABLE_POINTS - 1].angleCentideg - calOffsetCentideg;
+            calSign = (calSpanCentideg < 0) ? -1 : 1;
+            for (int i = 0; i < CAL_TABLE_POINTS; i++) {
+              calTable[i].angleCentideg = toNormalizedCentideg(calTable[i].angleCentideg);
+            }
             linearTable[0] = calTable[0];                    // minUs and its measured angle
             linearTable[1] = calTable[CAL_TABLE_POINTS - 1];  // maxUs and its measured angle
             isCalibrated = true;
