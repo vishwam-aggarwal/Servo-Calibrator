@@ -18,10 +18,15 @@
   Multi-turn position tracking: the AS5600 itself only ever reports a
   raw 12-bit angle, 0-4095, that wraps every revolution -- it has no
   concept of "which lap." updatePositionTracking() turns that into a
-  signed, monotonic, unwrapped position (turnCount*4096 + raw) by
-  watching for a same-direction jump bigger than half a revolution
-  between two *consecutive* samples and crediting it to a whole-turn
-  counter instead of a real move. That's safe here because nothing this
+  signed, monotonic, unwrapped position by watching for a same-direction
+  jump bigger than half a revolution between two *consecutive* samples
+  and crediting it to a whole-turn count instead of a real move. That
+  unwrap is Universal-Encoder-Interface's (AS5600EncoderDriver in
+  continuous mode); this file used to implement it locally and no longer
+  does. The tracked position is carried in radians, since that is the
+  only form UEI exposes an unwrapped reading in -- converted to
+  centidegrees at the same single boundary as before, so nothing on the
+  wire changed. That's safe here because nothing this
   servo does can complete a full revolution between consecutive samples
   at this sample rate (tick() samples every 5ms; CAP, the fastest path,
   samples every I2C transaction, well under that) -- a real single-step
@@ -59,7 +64,7 @@
       signed, relative to wherever the shaft was at boot (0) -- averaged
       over the stable dwell window. Monotonic across turns: never wraps.
       NOT_SETTLED means SETTLE_TIMEOUT_MS elapsed without
-      SETTLE_DWELL_TICKS of consecutive <=SETTLE_DELTA_COUNTS deltas ever
+      SETTLE_DWELL_TICKS of consecutive <=SETTLE_DELTA_RAD deltas ever
       being observed -- centideg here is just the single last raw
       reading, not a genuinely stable value, and the shaft may still be
       moving when this reply arrives. Previously reported as a plain OK
@@ -95,7 +100,10 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Servo.h>
-#include <AS5600.h>
+// Universal-Encoder-Interface -- owns the multi-turn unwrap this file used
+// to hand-roll. Still built on RobTillaart's AS5600 underneath (UEI wraps
+// it), and pulls in Universal-Device-Interface, UEI's own dependency.
+#include <AS5600EncoderDriver.h>
 #include <string.h>
 
 const int SERVO_PIN = A3;
@@ -131,57 +139,62 @@ const int CENTER_US    = 1500;
 const unsigned long LOOP_PERIOD_MS = 5;   // 200Hz
 
 // Settling thresholds, all keyed off that fixed tick period.
-const int           SETTLE_DELTA_COUNTS = 2;    // max |total[n]-total[n-1]| between ticks to count as stopped
+// Max |pos[n]-pos[n-1]| between ticks to count as stopped. Still "2 AS5600
+// counts" -- the sensor's own quantization is what this has always meant --
+// just expressed in radians now that the tracked position is radians (see
+// updatePositionTracking()), written as the conversion rather than a
+// pre-rounded decimal so it stays correct by construction.
+const int   SETTLE_DELTA_COUNTS = 2;
+const float SETTLE_DELTA_RAD    = SETTLE_DELTA_COUNTS * (2.0f * 3.14159265358979f / 4096.0f);
 const int           SETTLE_DWELL_TICKS  = 40;   // 200ms sustained
 const unsigned long SETTLE_TIMEOUT_MS   = 3000; // safety net -- slowest real move measured so far was under 1s
 
 Servo servo;
-AS5600 encoder;
 
-// Raw 12-bit reading (0-4095 per revolution), nothing else.
-uint16_t readEncoder() {
-  return encoder.readAngle();
-}
+// continuous = true: readPhysicalAngleRad() accumulates across revolutions
+// rather than resetting at the AS5600's 4096-count wrap.
+AS5600EncoderDriver encoder(Wire, /*continuous=*/true);
 
 // ------------------------------------------------------------------
-// Multi-turn position tracking -- see the file-level comment for the
-// full reasoning. turnCount is the signed lap counter; totalCounts is
-// the resulting always-continuous position (turnCount*4096 + raw).
+// Position tracking -- now owned by Universal-Encoder-Interface's
+// AS5600EncoderDriver rather than hand-rolled here. This file used to keep
+// its own signed lap counter and rebuild a continuous position as
+// turnCount*4096 + raw; UEI's unwrapRawCounts() (EncoderMath.h) is that
+// same algorithm with the same half-revolution-between-samples assumption,
+// maintained and tested in one place, so the local copy was deleted rather
+// than kept in parallel. The assumption is as safe here as it ever was --
+// this file samples at 200Hz, and CAP faster still.
+//
+// The carried unit is RADIANS now, not counts: UEI exposes its unwrapped
+// reading only as a float angle (readRawCounts() is deliberately always the
+// bounded 0..4095 register and cannot carry lap information). Conversion to
+// centidegrees still happens at exactly the same boundary as before, so the
+// wire protocol is byte-for-byte unchanged.
+//
+// readPhysicalAngleRad(), not readAngleRad(): no software zero offset is
+// applied, so the boot reading is the shaft's absolute angle -- exactly
+// what this firmware reported before (it seeded totalCounts from the raw
+// register, not from zero). The host works in relative terms and re-zeros
+// on every connection anyway.
 // ------------------------------------------------------------------
-const int WRAP_THRESHOLD = 2048;   // half a revolution -- a same-direction jump bigger than
-                                    // this between two consecutive samples is a wrap, not a
-                                    // real move (see file-level comment for why that's safe
-                                    // at this sample rate)
-
-int32_t turnCount = 0;
-int prevRaw = 0;
-long totalCounts = 0;
+float totalRad = 0.0f;   // continuous, unwrapped position in radians
 
 // The only place anywhere in this program that reads the encoder.
-// Updates the lap counter and returns the new continuous total.
-long updatePositionTracking() {
-  int raw = readEncoder();
-  int naiveDelta = raw - prevRaw;
-  if (naiveDelta < -WRAP_THRESHOLD)      turnCount++;   // wrapped forward, 4095->0
-  else if (naiveDelta > WRAP_THRESHOLD)  turnCount--;   // wrapped backward, 0->4095
-  prevRaw = raw;
-  totalCounts = (long)turnCount * 4096L + raw;
-  return totalCounts;
+float updatePositionTracking() {
+  totalRad = encoder.readPhysicalAngleRad();
+  return totalRad;
 }
 
-// counts -> centidegrees (degrees x100). Rounds to nearest, symmetric
-// around zero so a negative total (shaft has gone below its boot
-// position) rounds the same way a positive one does. The multiply runs
-// in 64 bits purely as cheap insurance against overflow -- this servo's
-// real mechanical range is under one revolution, so counts never gets
-// anywhere near where a 32-bit product would actually overflow.
-const long CENTIDEG_NUM = 36000L;   // 360 deg * 100
-const long CENTIDEG_DEN = 4096L;    // counts per revolution
+// radians -> centidegrees (degrees x100). lroundf() rounds to nearest and
+// is symmetric about zero, so a negative position (shaft below its boot
+// reference) rounds the same way a positive one does -- the same property
+// the previous integer implementation went out of its way to preserve, now
+// for free. 18000/PI is the exact analogue of that version's 36000/4096
+// counts-based ratio.
+const float CENTIDEG_PER_RAD = 5729.577951308232f;
 
-long countsToCentideg(long counts) {
-  int64_t num = (int64_t)counts * CENTIDEG_NUM;
-  if (num >= 0) return (long)((num + CENTIDEG_DEN / 2) / CENTIDEG_DEN);
-  return (long)((num - CENTIDEG_DEN / 2) / CENTIDEG_DEN);
+long radToCentideg(float rad) {
+  return lroundf(rad * CENTIDEG_PER_RAD);
 }
 
 // ------------------------------------------------------------------
@@ -217,11 +230,11 @@ enum Mode { MODE_IDLE, MODE_SETTLING };
 Mode mode = MODE_IDLE;
 
 int targetPulseUs = CENTER_US;   // echoed back in the reply
-long settleSum = 0;              // sum of totalCounts samples across the stable dwell window
+float settleSum = 0.0f;          // sum of position samples (radians) across the stable dwell window
 int settleStableCount = 0;
 unsigned long settleStartMs = 0;
 unsigned long nextTickMs = 0;
-long prevTickTotal = 0;          // totalCounts as of the previous tick, for settle-delta comparison
+float prevTickTotal = 0.0f;      // position as of the previous tick, for settle-delta comparison
 
 // Reports the settled value, or -- if SETTLE_TIMEOUT_MS elapsed without
 // ever actually settling -- an ERR instead of a fake OK. lastTotal in
@@ -231,12 +244,12 @@ long prevTickTotal = 0;          // totalCounts as of the previous tick, for set
 // caller that only ever checked reply[0]=="OK" now correctly sees a
 // failure instead of silently treating an unsettled reading as real
 // data (see this command's protocol comment for the full reasoning).
-void reportSettled(long lastTotal, bool converged) {
+void reportSettled(float lastTotal, bool converged) {
   if (!converged) {
     Serial.print(F("ERR NOT_SETTLED "));
     Serial.print(targetPulseUs);
     Serial.print(' ');
-    Serial.println(countsToCentideg(lastTotal));
+    Serial.println(radToCentideg(lastTotal));
     mode = MODE_IDLE;
     return;
   }
@@ -245,7 +258,7 @@ void reportSettled(long lastTotal, bool converged) {
   Serial.print(F("OK "));
   Serial.print(targetPulseUs);
   Serial.print(' ');
-  Serial.println(countsToCentideg(settleSum / settleStableCount));
+  Serial.println(radToCentideg(settleSum / (float)settleStableCount));
   mode = MODE_IDLE;
 }
 
@@ -261,7 +274,7 @@ void handleUs(int n) {
   }
   servo.writeMicroseconds(pulseUs);
   targetPulseUs = pulseUs;
-  long total = updatePositionTracking();   // fresh seed right as the move starts
+  float total = updatePositionTracking();   // fresh seed right as the move starts
   settleSum = total;
   settleStableCount = 1;
   settleStartMs = millis();
@@ -276,11 +289,11 @@ void handleUs(int n) {
 // this command's protocol comment at the top of the file for why that's
 // fine here specifically.
 // ------------------------------------------------------------------
-struct CapSample { uint16_t tMs; long counts; };
-// Halved from 200: each sample now carries a 4-byte multi-turn total
-// instead of a 2-byte raw reading, so this keeps the buffer's total RAM
-// footprint the same as before it (still RAM-bounded, see protocol
-// comment above).
+struct CapSample { uint16_t tMs; float rad; };
+// Halved from 200 back when each sample went from a 2-byte raw reading to
+// a 4-byte multi-turn total; a float position is the same 4 bytes, so the
+// buffer's RAM footprint is unchanged again here (still RAM-bounded, see
+// protocol comment above).
 const uint16_t CAP_BUFFER_SIZE = 100;
 CapSample capBuf[CAP_BUFFER_SIZE];
 
@@ -301,20 +314,20 @@ void handleCap(int n) {
   uint16_t count = 0;
   while (count < CAP_BUFFER_SIZE) {
     capBuf[count].tMs = (uint16_t)(millis() - startMs);
-    capBuf[count].counts = updatePositionTracking();   // same single tracked read tick() uses
+    capBuf[count].rad = updatePositionTracking();   // same single tracked read tick() uses
     count++;
     if (delayMs > 0) delay(delayMs);
   }
 
-  // Converted to centidegrees only here, after capture -- keeps the
-  // tight sampling loop above free of the conversion's int64 multiply,
-  // same reasoning as the original "stream only after it's done".
+  // Converted to centidegrees only here, after capture -- keeps the tight
+  // sampling loop above free of the conversion, same reasoning as the
+  // original "stream only after it's done".
   Serial.print(F("CAPSTART ")); Serial.println(pulseUs);
   for (uint16_t i = 0; i < count; i++) {
     Serial.print(F("CP "));
     Serial.print(capBuf[i].tMs);
     Serial.print(' ');
-    Serial.println(countsToCentideg(capBuf[i].counts));
+    Serial.println(radToCentideg(capBuf[i].rad));
   }
   Serial.print(F("CAPEND ")); Serial.println(count);
 }
@@ -357,13 +370,13 @@ void readSerialNonBlocking() {
 // every single tick -- everything else is downstream of it. Called
 // once per LOOP_PERIOD_MS from loop().
 void tick() {
-  long total = updatePositionTracking();
-  long delta = total - prevTickTotal;   // plain subtraction -- total is already continuous, no wrap fixup needed
+  float total = updatePositionTracking();
+  float delta = total - prevTickTotal;   // plain subtraction -- total is already continuous, no wrap fixup needed
   prevTickTotal = total;
 
   if (mode != MODE_SETTLING) return;
 
-  if (labs(delta) <= SETTLE_DELTA_COUNTS) {
+  if (fabsf(delta) <= SETTLE_DELTA_RAD) {
     settleSum += total;
     settleStableCount++;
     if (settleStableCount >= SETTLE_DWELL_TICKS) {
@@ -389,17 +402,27 @@ void setup() {
 
   Wire.begin();
   Wire.setClock(400000);  // Fast-mode I2C -- keeps one read comfortably inside a tick
-  encoder.begin();
-  if (!encoder.isConnected()) {
-    Serial.println(F("# FATAL: AS5600 not detected. Halting."));
+  // UEI's begin() brings the chip up and probes it -- a false return is the
+  // ERR_NOT_CONNECTED case the old separate isConnected() check covered.
+  if (!encoder.begin()) {
+    Serial.print(F("# FATAL: "));
+    Serial.print(encoder.getErrorString(encoder.getError()));
+    Serial.println(F(". Halting."));
     while (true) {}
+  }
+
+  // Magnet diagnostics this firmware had no access to before: an I2C ack
+  // says nothing about whether a magnet is present and within AGC range,
+  // which is the difference between real readings and plausible garbage.
+  if (!encoder.isValid()) {
+    Serial.print(F("# WARNING: "));
+    Serial.println(encoder.getStatusString(encoder.getStatus()));
   }
 
   servo.attach(SERVO_PIN, ABS_FLOOR_US, ABS_CEIL_US);
   servo.writeMicroseconds(CENTER_US);   // known starting position, not wherever the last session left it
-  prevRaw = readEncoder();              // seed the tracker; boot position becomes 0 total counts (0.00 centideg)
-  totalCounts = prevRaw;
-  prevTickTotal = totalCounts;
+  totalRad = updatePositionTracking();  // seed UEI's unwrap state from the shaft's current angle
+  prevTickTotal = totalRad;
 
   Serial.println(F("# READY"));
 }

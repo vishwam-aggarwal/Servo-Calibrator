@@ -180,7 +180,7 @@
 <div class="page">
 
   <header>
-    <div class="eyebrow">Universal-Trajectory-Interface companion tool</div>
+    <div class="eyebrow">Universal-Encoder-Interface + Universal-Trajectory-Interface companion tool</div>
     <h1>Servo Calibrator</h1>
     <p class="subhead">
       One button finds a servo's real pulse range and builds a 20-point calibration table, fully automated.
@@ -323,8 +323,8 @@
        telemetry line, just a different shape/unit (centidegrees, and no
        mode/model field -- see the app code below for how those are now
        tracked client-side instead).
-     - "<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <rawPos>"
-       and "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <rawPos>"
+     - "<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <posCentideg>"
+       and "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <posCentideg>"
        stream during calibration -- genuinely new categories this
        protocol didn't have before, since CALIBRATE used to be a single
        blocking call with one final reply. TABLE also streams on its own,
@@ -332,9 +332,17 @@
        fetchTable() below) -- same exact line shape either way.
        These are NOT replies to any pending command -- see onProgress/
        onTable below.
-     - "<elapsedMs> ERR <code> <rawPos>" is an asynchronous internal
+     - "<elapsedMs> ERR <code> <posCentideg>" is an asynchronous internal
        failure (e.g. a calibration settle timing out) -- also not tied
        to whichever command happens to be pending at that moment.
+     - The trailing <posCentideg> every one of those three shapes ends
+       with is the firmware's current FILTERED shaft position, in
+       raw-frame centidegrees (relative to the board's boot position,
+       NOT normalized to [0, maxAngleDeg] the way calTable/TELEM are).
+       It was raw AS5600 counts until the firmware's encoder path moved
+       to Universal-Encoder-Interface and its internal position stopped
+       being counts. Nothing here parses it -- every handler below reads
+       the fields ahead of it -- so it's a log aid, not protocol.
      - A line starting literally with "OK "/"ERR " (no leading number)
        is a genuine synchronous reply to whichever command was just sent.
    The one thing that hasn't changed: a naive "read one line, assume
@@ -631,6 +639,15 @@ function buildCalibrationHeader(cal) {
   return `// Servo calibration table -- ${cal.points.length} points, direction-averaged
 // Pulse range ${cal.minPulseUs}-${cal.maxPulseUs}us, stroke 0-${cal.maxAngleDeg.toFixed(2)}deg
 // Generated ${new Date().toISOString()}
+//
+// This is a plain RAM array, readable by ordinary indexing on any target.
+// If the code consuming it instead reads calibration tables out of flash
+// with pgm_read_word() -- the usual arrangement on AVR, where flash and
+// RAM are separate address spaces -- add PROGMEM to the array declaration
+// below. That is not optional there: handing a non-PROGMEM array to a
+// reader expecting one does not fault, it just reads whatever happens to
+// sit at the same numeric address in flash, so the table silently becomes
+// garbage rather than failing loudly.
 
 #pragma once
 #include <stdint.h>
@@ -673,7 +690,7 @@ let fetchedTableEntries = null;
 
 link.onTable = (line) => {
   if (!calRunning && !fetchingTable) return;
-  // "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <rawPos>"
+  // "<elapsedMs> TABLE <idx> <pulseUs> <angleCentideg> <posCentideg>"
   const p = line.trim().split(/\s+/);
   const idx = parseInt(p[2], 10);
   const pulseUs = parseInt(p[3], 10);
@@ -739,7 +756,7 @@ link.onAsyncError = (line) => {
 };
 
 link.onProgress = (line) => {
-  // "<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <rawPos>" --
+  // "<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <posCentideg>" --
   // the one place a completed GO move signals itself: STATE_TRAJ_WAIT
   // prints exactly one PROGRESS line, right as it settles, before
   // handing off to STATE_TRAJ_DONE (see the .ino's own comment).
@@ -768,6 +785,18 @@ el("btn-export").onclick = async () => {
     requireConnected();
     if (!calibration) throw new Error("Not calibrated yet.");
     const fetched = await fetchTable();
+    // angleCentideg is int16_t in the emitted struct (matching the field
+    // width every consumer of this shape uses), so a stroke past
+    // 327.67 deg would compile to a silently wrapped negative value. The
+    // firmware's own table is int32_t and has no such limit, so this can
+    // only ever be caught here, at the point the narrower type is chosen.
+    const overflow = fetched.points.find(pt => pt.angleCentideg > 32767 || pt.angleCentideg < -32768);
+    if (overflow) {
+      throw new Error(
+        `Measured stroke (${fetched.maxAngleDeg.toFixed(2)} deg) exceeds what the exported ` +
+        `table's int16_t angle field can hold (max 327.67 deg). Export aborted rather than ` +
+        `writing a table that would silently wrap once compiled.`);
+    }
     const blob = new Blob([buildCalibrationHeader(fetched)], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
