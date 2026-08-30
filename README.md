@@ -19,16 +19,20 @@ No install, no build step. It's one HTML file that talks to an Arduino
 over [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API).
 
 > **Status:** the firmware is a self-contained FSM (`ServoCalibrator_Companion.ino`)
-> verified against real hardware, including a full calibrate → drive
-> round-trip. The app (`website/app.html`) was rewritten against
-> that firmware and verified against the real page code — real captured
-> hardware wire data fed straight into `SerialLink`, calibration
-> parsing, and the charts — but **not yet exercised through an actual
-> live `navigator.serial` session** (the browser's native port picker
-> needs a human at the keyboard; that pass is still open). See
+> verified against real hardware — most recently a full
+> `CAL` → `GETTABLE` → `GO` round trip on an Arduino Nano R4, where a
+> 20-point table cut mean positioning error from 3.13° (naive linear) to
+> **0.19°** across five targets. The app (`website/app.html`) was
+> rewritten against that firmware and verified against the real page
+> code — real captured hardware wire data fed straight into `SerialLink`,
+> calibration parsing, and the charts — but **not yet exercised through
+> an actual live `navigator.serial` session** (the browser's native port
+> picker needs a human at the keyboard; that pass is still open). See
 > [Known limitations](#known-limitations) for what's still rough. **The
-> firmware depends on one sibling library, Universal-Trajectory-Interface —
-> public, no private access needed** — see
+> firmware depends on three sibling libraries — Universal-Encoder-Interface,
+> Universal-Trajectory-Interface, and the Universal-Device-Interface base
+> they both build on — plus RobTillaart's `AS5600`. All public, no private
+> access needed** — see
 > [Dependencies](#requirements--dependencies) before you try to build it.
 
 ## Contents
@@ -64,13 +68,19 @@ application code.
 
 ## Quick start
 
-1. **Install the two libraries this firmware needs** — both are free,
+1. **Install the four libraries this firmware needs** — all free,
    no private access required (see
    [Requirements & dependencies](#requirements--dependencies)):
    - **`AS5600`** (RobTillaart's), via the Arduino IDE's own Library
      Manager: `Sketch → Include Library → Manage Libraries…`, search
      `AS5600`, install the one by RobTillaart. Or from the command line:
-     `arduino-cli lib install "AS5600"`.
+     `arduino-cli lib install "AS5600"`. Still needed — the firmware
+     reaches it through Universal-Encoder-Interface rather than directly,
+     but that's a wrapper, not a replacement.
+   - **[Universal-Encoder-Interface](https://github.com/vishwam-aggarwal/Universal-Encoder-Interface)**
+     — install manually, same as the two below. Provides
+     `AS5600EncoderDriver`, which owns the multi-turn (across-revolution)
+     position tracking this firmware depends on.
    - **[Universal-Trajectory-Interface](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface)**
      — not in Library Manager's index (it's not a published Arduino
      library, just a public GitHub repo), so install it manually:
@@ -83,6 +93,17 @@ application code.
      result, no rename needed since the repo already has a proper
      `library.properties`.) Restart the IDE afterward if it was already
      open, so it picks up the new library.
+   - **[Universal-Device-Interface](https://github.com/vishwam-aggarwal/Universal-Device-Interface)**
+     — the foundation layer both of the above declare, so it's needed even
+     though this firmware never includes anything from it directly.
+     Universal-Encoder-Interface's `IEncoder` derives from its `IDevice`;
+     separately, the Arduino IDE compiles every `.cpp` in a library's
+     `src/`, so Universal-Trajectory-Interface's `TrajectoryGroup.cpp` /
+     `CartesianMove.cpp` (neither of which this sketch uses) pull in
+     `<IDevice.h>` regardless. Without it the build stops at
+     `fatal error: IDevice.h: No such file or directory`. Install it
+     exactly the same way as above (ZIP or `git clone` into
+     `libraries/`), also public.
 2. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino`
    in the Arduino IDE (or `arduino-cli`) and upload it to your board.
    Servo signal is fixed at pin `A3` (change `SERVO_PIN` in the sketch if
@@ -162,7 +183,11 @@ Two pieces:
   is planned/evaluated on-device at that same fixed ~50Hz, alongside
   telemetry that streams unconditionally every tick regardless of
   state — the app never paces the motion, it only sends target/limit
-  commands and plots what comes back.
+  commands and plots what comes back. Every encoder read goes through
+  [`AS5600EncoderDriver`](https://github.com/vishwam-aggarwal/Universal-Encoder-Interface)
+  in continuous mode, which is what keeps the angle accumulating across
+  full revolutions instead of snapping back at each wrap — the firmware
+  used to do that unwrapping itself and no longer does.
 - **`website/app.html`** — the app. Connection, calibration
   triggering/export, and the three live charts all live here; the
   firmware doesn't know anything about SVG or the exported `.h` file's
@@ -190,9 +215,10 @@ strictly ascending) — done on-device, once, right when a calibration
 finishes, so `GETTABLE`'s own wire output already satisfies it with no
 client-side transform needed. Export (see [below](#export)) generates a
 standalone `.h` file with a plain `CalPoint` struct and populated array
-in that exact shape, ready to hand straight to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s
+in that exact shape, to hand to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s
 table-accepting constructor overload by whatever *consuming* application
-installs this servo — that's where UMI actually comes in, downstream,
+installs this servo (one edit needed first — those drivers require a
+`PROGMEM` table; see [Export](#export)) — that's where UMI actually comes in, downstream,
 not in building this tool. Physical testing
 across two servos (140 to 22,000+ samples, in the investigation that
 motivated this whole tool) found a 20-point table cuts mean positioning
@@ -203,8 +229,10 @@ The old wizard-based version of this repo did (see git history) — this
 version doesn't, because direction, logical zero, and mounting offset are
 all *installation*-specific decisions this characterization-only tool has
 no way to know. Export the table (see [below](#export)) — it's already a
-ready-to-use `CalPoint` array, no manual transcription needed — and pass
-it to `RCServoMotorDriver`'s/`PCA9685MotorDriver`'s table-accepting
+`CalPoint` array in the right shape and framing, no manual transcription
+needed — add `PROGMEM` to its declaration (see [Export](#export) for why
+that one edit isn't optional), and pass it to
+`RCServoMotorDriver`'s/`PCA9685MotorDriver`'s table-accepting
 constructor overload alongside whatever direction/offset your actual
 installation needs.
 
@@ -221,9 +249,27 @@ itself never mentions UMI — plus a populated
 own `[0, maxAngleDeg]` framing (see
 [How it works](#how-it-works)). It's a plain RAM array, not `PROGMEM` —
 directly readable with no special macro whether or not the consuming
-code ever touches UMI; add `PROGMEM` yourself if you want it in flash
-instead (and read it back with `pgm_read_word()`, the way UMI's own
-drivers do). There's no matching **Import** — this
+code ever touches UMI.
+
+> **Add `PROGMEM` before handing it to a UMI driver.** This is not the
+> optional flash-vs-RAM tradeoff it reads like. UMI's
+> `ServoCalibrationTable.h` reads every entry through `readCalPoint()`,
+> which calls `pgm_read_word()` unconditionally — so on AVR, where flash
+> and RAM are separate address spaces, passing a plain RAM array to
+> `RCServoMotorDriver`/`PCA9685MotorDriver` reads flash at the same
+> numeric address and gets garbage. In practice `validateCalTable()` then
+> rejects the nonsense (the driver falls back to the linear formula and
+> reports `ERR_INVALID_CAL_TABLE` once), so it isn't silent — but it also
+> isn't the table you measured. Add `PROGMEM` to the array declaration
+> and it works as intended. The exported file says the same thing in its
+> own header comment, phrased generically, since it's deliberately
+> written to be usable outside UMI too.
+
+Note also that the emitted `angleCentideg` field is `int16_t`, matching
+UMI's `CalPoint` — so it tops out at 327.67°. The firmware's own table is
+`int32_t` and has no such limit, so Export refuses outright (rather than
+writing a table that would silently wrap once compiled) if a servo ever
+measures a stroke past that. There's no matching **Import** — this
 firmware has no command that accepts a pushed-in table, unlike its
 predecessor. `GETTABLE` only ever answers for the *current* session,
 too: opening the port always reboots the board, wiping its table, so
@@ -259,10 +305,33 @@ not for skipping a future physical recalibration of that same servo.
 |---|---|---|
 | [RobTillaart's `AS5600`](https://github.com/RobTillaart/AS5600) | Low-level AS5600 I²C register access | Public — `arduino-cli lib install "AS5600"` or via Library Manager |
 | [**Universal-Trajectory-Interface**](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface) (mine) | `TrapezoidalProfile` — used **unconditionally** | **Public** |
+| [**Universal-Encoder-Interface**](https://github.com/vishwam-aggarwal/Universal-Encoder-Interface) (mine) | `AS5600EncoderDriver` — the AS5600 read path and its multi-turn unwrap | **Public** |
+| [**Universal-Device-Interface**](https://github.com/vishwam-aggarwal/Universal-Device-Interface) (mine) | Nothing, directly — it's the base both siblings above declare (`depends=Universal Device Interface`), and the Arduino IDE compiles a library's whole `src/` regardless of what the sketch includes | **Public** |
 
-In short: anyone with these two libraries installed (see
+In short: anyone with these four libraries installed (see
 [Quick start](#quick-start)) can build and upload this firmware —
-**no private dependency remains**. `ServoCalibrator_Companion` does
+**no private dependency remains**. Universal-Device-Interface joined the
+list on 2026-08-29, when Universal-Trajectory-Interface's `TrajectoryGroup`
+and `CartesianMove` were retrofitted onto its shared `IDevice` base; the
+per-axis profile math this firmware actually uses (`TrapezoidalProfile`)
+was deliberately left off that base and is unchanged, so that library is
+purely an install-time requirement here, not an API change.
+Universal-Encoder-Interface joined at the same time, when this firmware's
+hand-rolled AS5600 multi-turn tracking was replaced by its
+`AS5600EncoderDriver`.
+
+> **On an ATmega328P specifically** (the classic Nano this project was
+> developed on), the firmware now uses 78% of SRAM and `arduino-cli`
+> prints `Low memory available, stability problems may occur`. About 230
+> bytes of that is structural rather than avoidable: on AVR a class's
+> diagnostic strings live in RAM, and Universal-Encoder-Interface's
+> `IDevice` vtable keeps every one of `AS5600EncoderDriver`'s reachable
+> whether this sketch calls them or not. It builds and links cleanly, and
+> there is no such pressure on a 32-bit board (an Arduino Nano R4 comes in
+> at 22% of its SRAM) — but on a 328P, that's the first thing to suspect
+> if you hit instability.
+
+`ServoCalibrator_Companion` does
 **not** depend on Universal-Motor-Interface, despite an earlier version
 of this doc claiming otherwise — its calibration-table code (`CalPoint`,
 angle↔pulse interpolation) is a self-contained reimplementation in the
@@ -324,10 +393,19 @@ While a calibration or move is running, every command except `ABORT` and
 reply to any pending command:
 
 ```
-<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <rawPos>
-<elapsedMs> TABLE <index> <pulseUs> <angleCentideg> <rawPos>
-<elapsedMs> ERR <code> <rawPos>
+<elapsedMs> PROGRESS <stateName> <tick> <lastSentUs> <posCentideg>
+<elapsedMs> TABLE <index> <pulseUs> <angleCentideg> <posCentideg>
+<elapsedMs> ERR <code> <posCentideg>
 ```
+
+That trailing `<posCentideg>` is a diagnostic field every one of these
+lines carries: the current *filtered* shaft position, in raw-frame
+centidegrees (relative to wherever the board booted, **not** normalized
+to `[0, maxAngleDeg]`). It used to be raw AS5600 counts; it became
+centidegrees when the encoder path moved to Universal-Encoder-Interface
+and the internal position stopped being counts at all. Nothing parses
+it — the app reads the fields ahead of it and ignores this one — so
+treat it as a log aid, not protocol.
 
 `TABLE` fires twice per index (20 points, down-pass then up-pass —
 the up-pass value is the final, direction-averaged one); the app detects
@@ -354,8 +432,9 @@ shape either way), and always calls `GETTABLE` once calibration
 completes to get the authoritative normalized table rather than trusting
 what it watched go by live.
 
-Once calibrated, telemetry streams every tick (~50Hz), unconditionally,
-regardless of state:
+Telemetry streams every tick (~50Hz) from boot onward, unconditionally
+— not only once calibrated, and regardless of state (idle,
+mid-calibration, or mid-move):
 
 ```
 TELEM <ms> <targetCentideg> <targetVelCentidegPerSec> <actualCentideg> <actualVelCentidegPerSec>

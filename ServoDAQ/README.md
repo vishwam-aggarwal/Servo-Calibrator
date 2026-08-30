@@ -12,10 +12,16 @@ untouched, this kind of exploratory work goes in its own files instead.
 
 No zero reference, no model, no calibration table — that's the host's
 job. The firmware's only responsibilities are talking to the servo,
-reading the AS5600, and turning raw counts into a signed, monotonic,
+reading the AS5600, and turning that into a signed, monotonic,
 multi-turn-unwrapped centidegree position (see the `.ino`'s own
 file-level comment for how). Everything else — range-finding, deciding
 what "the edge" means, plotting — lives in `ServoDAQ_Host/`.
+
+**Libraries needed to build the firmware** (all public): RobTillaart's
+`AS5600`, plus Universal-Encoder-Interface and its own base
+Universal-Device-Interface. As of 2026-08-29 the multi-turn unwrap is
+Universal-Encoder-Interface's `AS5600EncoderDriver` (continuous mode)
+rather than a copy maintained here; the wire protocol is unchanged.
 
 ## Protocol
 

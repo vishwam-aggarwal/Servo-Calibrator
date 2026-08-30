@@ -98,11 +98,19 @@
 #define CENTER_US 1500          // pulse commanded at the start of calibration
 #define CAL_SETTLE_TIMEOUT_MS 3000   // exit route 1 of every waiting state: give up if it never settles
 #define CAL_SETTLE_WINDOW_SAMPLES 10 // N -- how many recent raw readings the running average is over (to tune later)
-#define CAL_SETTLE_WINDOW_COUNTS 2   // max |current raw - running average| to call it settled (to tune later)
-// M -- how many recent raw readings filteredPosition is averaged over.
+// Max |current reading - running average| to call it settled. Expressed in
+// radians now that the position pipeline carries radians (see
+// updatePositionTracking()), but deliberately still WRITTEN as "2 AS5600
+// counts" rather than a rounded decimal -- 2 counts of the sensor's own
+// quantization is what this threshold has always meant, and keeping it in
+// those terms means it stays correct by construction rather than by a
+// conversion someone has to re-derive. (to tune later)
+#define CAL_SETTLE_WINDOW_COUNTS 2
+#define CAL_SETTLE_WINDOW_RAD (CAL_SETTLE_WINDOW_COUNTS * (2.0f * 3.14159265358979f / 4096.0f))
+// M -- how many recent raw readings filteredPositionRad is averaged over.
 // NOT what TELEM reports anymore (see printTelemetry() -- that now
 // sends the raw, unfiltered position directly, per explicit direction).
-// filteredPosition itself still matters for real functional uses this
+// filteredPositionRad itself still matters for real functional uses this
 // value tunes the responsiveness of: the calibration table's own
 // angleCentideg values (recordTableEntry()), a GO move's planned
 // starting point (currentAngleDeg()), and the calibration scan's own
@@ -174,8 +182,24 @@
 #define CAL_DEFAULT_ACCEL_DEG_PER_SEC2 300.0f
 
 #include <Wire.h>
-#include <AS5600.h>
+// Universal-Encoder-Interface. Wraps RobTillaart's AS5600 (still the
+// underlying I2C register driver, still required) behind IRotaryEncoder,
+// and -- the reason this firmware uses it rather than the raw library --
+// owns the multi-turn unwrap this file used to hand-roll. UEI depends on
+// Universal-Device-Interface, same as Universal-Trajectory-Interface does.
+#include <AS5600EncoderDriver.h>
 #include <Servo.h>
+// Universal-Trajectory-Interface. Installing it ALSO requires installing
+// Universal-Device-Interface, even though nothing below ever includes
+// anything from it: as of 2026-08-29 UTI declares
+// `depends=Universal Device Interface`, and its TrajectoryGroup/
+// CartesianMove sources -- which this firmware never uses, but which the
+// Arduino build compiles anyway, since it builds every .cpp in a
+// library's src/ regardless of what the sketch includes -- do
+// `#include <IDevice.h>`. Without UDI installed the build fails with
+// `fatal error: IDevice.h: No such file or directory`, pointing at a file
+// this sketch never asked for. TrapezoidalProfile itself was deliberately
+// left off that IDevice retrofit and is unchanged.
 #include <TrapezoidalProfile.h>
 #include <string.h>
 #include <stdio.h>
@@ -188,7 +212,12 @@ const int LINE_BUF_LEN = 32;
 char lineBuf[LINE_BUF_LEN];
 int lineLen = 0;
 
-AS5600 encoder;
+// continuous = true: readAngleRad() accumulates across revolutions
+// instead of resetting at the AS5600's 4096-count wrap -- the multi-turn
+// tracking this firmware requires (a servo spinning past its limit is a
+// real, observed failure mode here, not a hypothetical). Constructed on
+// Wire, which setup() still begin()s/clocks itself.
+AS5600EncoderDriver encoder(Wire, /*continuous=*/true);
 Servo servo;
 
 // All calibration states are named CAL_<routine>_<substate> -- STATE_CAL_
@@ -308,48 +337,61 @@ struct CalPoint {
 };
 
 // ------------------------------------------------------------------
-// Multi-turn position tracking -- mirrors ServoDAQ_Companion's
-// updatePositionTracking() exactly (same algorithm, same reasoning; see
-// that file's own header comment for the full writeup). The AS5600 only
-// ever reports a raw 12-bit angle, 0-4095, wrapping every revolution --
-// it has no concept of "which lap." A same-direction jump bigger than
-// half a revolution (2048 counts) between two *consecutive* samples is
-// therefore treated as a wrap, credited to a signed lap counter, rather
-// than mistaken for real motion. Safe at this tick rate for the same
-// reason it's safe there: nothing this firmware commands can complete a
-// full revolution between two ticks 20ms apart -- confirmed true even
-// for the failure mode that motivated this (a servo spinning
-// uncontrolled past its limit instead of stalling, ~400 counts/20ms
-// tick on real hardware -- an order of magnitude under the threshold).
+// Position tracking -- now owned by Universal-Encoder-Interface's
+// AS5600EncoderDriver (constructed with continuous = true, see its
+// declaration above) rather than hand-rolled here.
 //
-// Before this, filteredPosition/settleBuffer/etc. all carried the raw
-// wrapped value directly -- exactly the bug that let a real spin event
-// land near 0 and get misread as a small, plausible position instead of
-// the actual multi-thousand-count displacement it was.
+// This file used to carry its own lap counter: read the AS5600's raw
+// 12-bit angle, treat a same-direction jump bigger than half a revolution
+// between consecutive samples as a wrap, credit it to a signed turnCount,
+// and rebuild a continuous count from turnCount*4096 + raw. UEI's
+// unwrapRawCounts() (EncoderMath.h) is that identical algorithm, with the
+// identical half-period assumption, maintained in one place and covered by
+// that library's own desktop tests -- so the local copy was deleted rather
+// than kept in parallel. The assumption still holds here for the same
+// reason it always did: nothing this firmware commands can complete a full
+// revolution between two ticks 20ms apart, confirmed on real hardware even
+// for the failure mode that motivated multi-turn tracking in the first
+// place (a servo spinning uncontrolled past its limit instead of stalling,
+// ~400 counts/tick -- an order of magnitude under the threshold).
 //
-// Placed here, after CalPoint/the enums rather than up by AS5600 encoder/
-// Servo servo where it conceptually belongs, for the same auto-prototype
-// reason CalPoint itself is up here: Arduino inserts every function's
-// prototype right before the *first* function definition in the file --
-// if updatePositionTracking() were that first function, every other
-// function's prototype (which need CalibrationState/ErrorCode/CalPoint
-// visible) would get hoisted above those types too.
-const int WRAP_THRESHOLD = 2048;
+// THE CARRIED UNIT IS NOW RADIANS, not AS5600 counts. UEI exposes its
+// unwrapped, continuous reading only as a float angle (readAngleRad());
+// readRawCounts() is deliberately always the bounded 0..4095 register, so
+// it cannot carry lap information. Everything downstream that used to hold
+// `long` counts -- totalRad, filteredPositionRad, the settle window, the
+// scan's own step deltas -- therefore holds float radians instead. This is
+// a unit change, not a precision loss: float32's 24-bit mantissa resolves
+// ~1e-5 rad over the range this firmware can reach, roughly two orders of
+// magnitude finer than the AS5600's own ~0.0015 rad (1 count) quantization.
+// Conversion to centidegrees still happens at exactly the same two
+// boundaries it always did -- currentAngleCentideg() and
+// rawAngleCentideg() -- so calTable, TELEM, and the wire protocol are all
+// completely unaffected.
+//
+// Placed here, after CalPoint/the enums rather than up by the encoder/servo
+// objects where it conceptually belongs, for the same auto-prototype reason
+// CalPoint itself is up here: Arduino inserts every function's prototype
+// right before the *first* function definition in the file -- if
+// updatePositionTracking() were that first function, every other function's
+// prototype (which need CalibrationState/ErrorCode/CalPoint visible) would
+// get hoisted above those types too.
 
-int32_t turnCount = 0;
-int prevRaw = 0;
-long totalCounts = 0;
+// Radians -> centidegrees. 18000/PI, the exact analogue of the old
+// integer 36000/4096 counts->centideg ratio.
+const float CENTIDEG_PER_RAD = 5729.577951308232f;
+
+float totalRad = 0.0f;   // continuous, unwrapped, zero-referenced to the boot position
+                          // (setup() calls encoder.zero()) -- the direct replacement for
+                          // the old `long totalCounts`
 
 // The only place anywhere in this program that reads the encoder.
-// Updates the lap counter and returns the new continuous total.
-long updatePositionTracking() {
-  int raw = encoder.readAngle();
-  int naiveDelta = raw - prevRaw;
-  if (naiveDelta < -WRAP_THRESHOLD)      turnCount++;   // wrapped forward, 4095->0
-  else if (naiveDelta > WRAP_THRESHOLD)  turnCount--;   // wrapped backward, 0->4095
-  prevRaw = raw;
-  totalCounts = (long)turnCount * 4096L + raw;
-  return totalCounts;
+// readAngleRad() (not readPhysicalAngleRad()) so setup()'s zero() offset
+// is applied: boot position reads exactly 0, matching this firmware's
+// long-standing behaviour.
+float updatePositionTracking() {
+  totalRad = encoder.readAngleRad();
+  return totalRad;
 }
 
 CalibrationState currentState = STATE_IDLE;
@@ -390,6 +432,33 @@ unsigned long elapsedStateTimeMs = 0;      // now - stateEnteredMs, recomputed e
 // directly. Resets the elapsed-time tracking immediately (not on the next
 // tick's recompute), so a case body that reads elapsedStateTimeMs right
 // after calling this always sees 0, never a stale value.
+// The trajectory's own current target, in the same centideg-scaled terms
+// printTelemetry() reports the actual measured position/velocity in --
+// both set every STATE_TRAJ_STREAM tick, from the same pos/vel that
+// tick's evaluate() call already produces to compute the pulse it writes
+// (see that case body). lastTrajTargetCentideg is deliberately NOT reset
+// anywhere else -- it holds at wherever the most recent move was headed
+// (0, i.e. the boot reference, before the first GO ever runs), the same
+// way a real setpoint would, so the html app's position-error chart
+// (actual - target, matching this project's existing website/app.html
+// convention) reads a small, meaningful settling error after a move
+// finishes rather than snapping to some arbitrary stale or undefined
+// value. trajTargetVelCentidegPerSec, in contrast, IS explicitly zeroed
+// the instant STATE_TRAJ_STREAM hands off to STATE_TRAJ_WAIT (see that
+// case body) AND again in changeState()'s STATE_IDLE block, which is
+// what catches the abort/timeout paths that jump straight to idle from
+// mid-stream and never reach that handoff -- once nothing is actively
+// being commanded to move, the planned velocity is genuinely 0, not
+// "whatever the last tick's value happened to be."
+//
+// Declared up here, rather than down beside trajProfile/trajStartMs where
+// the rest of the trajectory state lives, because changeState() below
+// assigns trajTargetVelCentidegPerSec: Arduino auto-generates forward
+// prototypes for functions but not for variables, so a global has to be
+// defined before its first textual use.
+int32_t lastTrajTargetCentideg = 0;
+int32_t trajTargetVelCentidegPerSec = 0;
+
 void changeState(CalibrationState newState) {
   currentState = newState;
   stateEnteredMs = millis();
@@ -409,11 +478,23 @@ void changeState(CalibrationState newState) {
     // reason: either one left true by an aborted/timed-out run could
     // silently exempt a genuinely real step from judgment on the *next*
     // CAL run otherwise.
+    // trajTargetVelCentidegPerSec for the same reason: STATE_TRAJ_STREAM
+    // zeroes it on its own normal handoff to STATE_TRAJ_WAIT, but an
+    // abort (or a timeout) jumps straight here from mid-stream and skips
+    // that, leaving TELEM reporting whatever the last commanded velocity
+    // happened to be -- forever, since nothing else writes it while
+    // idle. Observed on real hardware as a steady -12000 centideg/s long
+    // after the servo had stopped, which the html app's velocity chart
+    // would draw as a phantom setpoint. lastTrajTargetCentideg is
+    // deliberately NOT reset alongside it -- holding at the last
+    // destination is its documented, intended behaviour (see its own
+    // comment); only the velocity is genuinely 0 once nothing is moving.
     calibrationRunning = false;
     trajectoryRunning = false;
     tableSendRunning = false;
     scanResetPending = false;
     skipNextStepCheck = false;
+    trajTargetVelCentidegPerSec = 0;
   }
 }
 
@@ -443,62 +524,73 @@ ErrorCode timeoutErrorFor(CalibrationState s) {
 bool abortRequested = false;   // set by handleLine() on CMD_ABORT; the tick housekeeping
                                 // (not handleLine itself) is what actually forces STATE_IDLE
 
-long prevTotalCounts = 0;      // previous tick's totalCounts, for the derivative below
-long encoderDerivative = 0;    // this tick's delta, counts/tick since tick period is fixed --
-                                // now computed from totalCounts (updatePositionTracking()), so a
-                                // real fast spin shows as a large derivative, not a wrap artifact
+float prevTotalRad = 0.0f;     // previous tick's totalRad, for the derivative below
+float encoderDerivativeRad = 0.0f;  // this tick's delta, radians/tick since the tick period is
+                                     // fixed -- computed from totalRad (updatePositionTracking()),
+                                     // which UEI has already unwrapped, so a real fast spin shows
+                                     // as a large derivative rather than a wrap artifact
 
 bool inMotion = false;   // set by writeServoUs(), consumed once by updateSettled()
 bool isSettled = false;  // updateSettled() is the only thing that ever sets this true
 
-// Running-average window over the last CAL_SETTLE_WINDOW_SAMPLES readings
-// -- a circular buffer plus its running sum, so each tick is an O(1)
-// update rather than resumming the whole window. long, not int -- these
-// carry totalCounts now (see updatePositionTracking()), which is
-// unbounded (multi-turn), not the old raw 0..4095 value; int (16-bit on
-// AVR) would silently overflow after a only few real turns.
-long settleBuffer[CAL_SETTLE_WINDOW_SAMPLES];
+// Running-average window over the last CAL_SETTLE_WINDOW_SAMPLES readings.
+// float now, carrying radians (see updatePositionTracking()) rather than
+// the old unbounded `long` count -- same 4 bytes per slot on AVR, so no
+// RAM change.
+//
+// The running-sum optimisation these windows used to carry is deliberately
+// gone: a sum that is only ever incrementally added to and subtracted from
+// accumulates float rounding error without bound, and filterBuffer's sum in
+// particular was never reset for the whole session (millions of operations
+// at 50Hz). Re-summing N<=10 floats per tick costs well under 100us on this
+// AVR against a 20ms tick budget, and is exact-by-construction instead.
+float settleBuffer[CAL_SETTLE_WINDOW_SAMPLES];
 int settleBufferCount = 0;   // valid samples so far, caps at CAL_SETTLE_WINDOW_SAMPLES
 int settleBufferIndex = 0;   // next slot to overwrite
-long settleBufferSum = 0;
 
 // Running-average window over the last CAL_POSITION_FILTER_SAMPLES
 // readings -- separate from settleBuffer above (different purpose: this
 // one is a general-purpose smoothed position for reporting/telemetry, so
 // unlike settleBuffer it's never reset on a fresh move -- it just keeps
-// smoothing continuously through motion too). long, not int -- same
-// totalCounts-is-unbounded reasoning as settleBuffer above.
-long filterBuffer[CAL_POSITION_FILTER_SAMPLES];
+// smoothing continuously through motion too). float radians, and re-summed
+// per tick rather than running-summed, for the reasons at settleBuffer
+// above -- this is the window where an unbounded running float sum would
+// have drifted worst, since it never resets.
+float filterBuffer[CAL_POSITION_FILTER_SAMPLES];
 int filterBufferCount = 0;
 int filterBufferIndex = 0;
-long filterBufferSum = 0;
-long filteredPosition = 0;   // current M-sample running average -- what printMessage() reports
+float filteredPositionRad = 0.0f;   // current M-sample running average, radians
 
-// Called every tick. Keeps filteredPosition as the running average of the
+// Called every tick. Keeps filteredPositionRad as the running average of the
 // last (up to) CAL_POSITION_FILTER_SAMPLES readings.
-void updateFilteredPosition(long currentRaw) {
+void updateFilteredPosition(float currentRaw) {
   if (filterBufferCount < CAL_POSITION_FILTER_SAMPLES) {
-    filterBufferSum += currentRaw;
     filterBuffer[filterBufferCount] = currentRaw;
     filterBufferCount++;
   } else {
-    filterBufferSum -= filterBuffer[filterBufferIndex];
-    filterBufferSum += currentRaw;
     filterBuffer[filterBufferIndex] = currentRaw;
     filterBufferIndex = (filterBufferIndex + 1) % CAL_POSITION_FILTER_SAMPLES;
   }
-  filteredPosition = filterBufferSum / filterBufferCount;
+  float sum = 0.0f;
+  for (int i = 0; i < filterBufferCount; i++) sum += filterBuffer[i];
+  filteredPositionRad = sum / (float)filterBufferCount;
 }
 
 // Every message goes through here: prefixed with the time elapsed since
 // the current state was entered, suffixed with the current filtered
-// position. More fields likely get appended here later.
+// position. That suffix is centidegrees now rather than raw AS5600 counts
+// -- the pipeline carries float radians since the move to
+// Universal-Encoder-Interface (see updatePositionTracking()), and an
+// integer centideg is both more readable in a log and consistent with
+// every other angle this firmware puts on the wire. It's a diagnostic
+// field only; website/app.html parses the TABLE fields ahead of it and
+// ignores this one. More fields likely get appended here later.
 void printMessage(const char* msg) {
   Serial.print(elapsedStateTimeMs);
   Serial.print(F(" "));
   Serial.print(msg);
   Serial.print(F(" "));
-  Serial.println(filteredPosition);
+  Serial.println(currentAngleCentideg());
 }
 
 // ErrorCode -> wire string. One entry per ErrorCode value, same idea as
@@ -559,7 +651,7 @@ const char* stateName(CalibrationState s) {
 }
 
 // Reports the current state, tickCount, and lastSentUs, alongside the
-// usual elapsed-time/filteredPosition printMessage() already appends --
+// usual elapsed-time/filteredPositionRad printMessage() already appends --
 // called every tick during calibration (see isCalibrationState() below)
 // to fill the gap CENTER/DOWN/UP/TABLE otherwise leave completely silent
 // between TABLE lines/errors (confirmed on real hardware: a full
@@ -614,24 +706,6 @@ TrapezoidalProfile trajProfile;   // planned once by STATE_TRAJ_PLAN, evaluated 
 unsigned long trajStartMs = 0;    // millis() at the moment STATE_TRAJ_PLAN planned the move --
                                    // STATE_TRAJ_STREAM's elapsed time is relative to this
 
-// The trajectory's own current target, in the same centideg-scaled terms
-// printTelemetry() reports the actual measured position/velocity in --
-// both set every STATE_TRAJ_STREAM tick, from the same pos/vel that
-// tick's evaluate() call already produces to compute the pulse it writes
-// (see that case body). lastTrajTargetCentideg is deliberately NOT reset
-// anywhere else -- it holds at wherever the most recent move was headed
-// (0, i.e. the boot reference, before the first GO ever runs), the same
-// way a real setpoint would, so the html app's position-error chart
-// (actual - target, matching this project's existing website/app.html
-// convention) reads a small, meaningful settling error after a move
-// finishes rather than snapping to some arbitrary stale or undefined
-// value. trajTargetVelCentidegPerSec, in contrast, IS explicitly zeroed
-// the instant STATE_TRAJ_STREAM hands off to STATE_TRAJ_WAIT (see that
-// case body) -- once nothing is actively being commanded to move, the
-// planned velocity is genuinely 0, not "whatever the last tick's value
-// happened to be."
-int32_t lastTrajTargetCentideg = 0;
-int32_t trajTargetVelCentidegPerSec = 0;
 
 // Streamed every tick, unconditionally -- idle, mid-calibration, or
 // mid-move -- unlike printProgress() (gated to isCalibrationState()): the
@@ -647,14 +721,14 @@ int32_t trajTargetVelCentidegPerSec = 0;
 //
 // Both actualCentideg and actualVelCentidegPerSec are RAW/unfiltered --
 // per explicit direction, TELEM should show the real, unsmoothed signal
-// rather than whatever filteredPosition happens to be tuned to for its
+// rather than whatever filteredPositionRad happens to be tuned to for its
 // other uses (the calibration table, a GO move's planned start, the
-// scan's own edge-detection -- see filteredPosition's own comment).
-// actualCentideg comes from rawAngleCentideg() (totalCounts, not
-// filteredPosition), passed through toNormalizedCentideg() so it lands in
+// scan's own edge-detection -- see filteredPositionRad's own comment).
+// actualCentideg comes from rawAngleCentideg() (totalRad, not
+// filteredPositionRad), passed through toNormalizedCentideg() so it lands in
 // the same normalized frame as lastTrajTargetCentideg -- still unfiltered
 // (the offset/sign remap doesn't reintroduce any smoothing).
-// actualVelCentidegPerSec comes from encoderDerivative (the raw per-tick
+// actualVelCentidegPerSec comes from encoderDerivativeRad (the raw per-tick
 // delta computed once in loop() -- see its own comment), which was
 // already unfiltered even before this change: the position filter's
 // whole purpose is smoothing AS5600 quantization noise for the *filtered*
@@ -666,12 +740,13 @@ int32_t trajTargetVelCentidegPerSec = 0;
 // Deliberately its own wire format (TELEM, space-separated, printed
 // directly rather than through printMessage()) instead of folding into
 // PROGRESS -- printMessage()'s elapsed-time-since-state-entry prefix and
-// raw-filteredPosition suffix are framing built for state-transition
+// raw-position suffix are framing built for state-transition
 // logging, not a fixed-rate telemetry stream a chart wants to index by
 // wall-clock time.
 void printTelemetry() {
   int32_t actualCentideg = toNormalizedCentideg(rawAngleCentideg());
-  int32_t actualVelCentidegPerSec = (int32_t)(calSign * encoderDerivative * 36000L / 4096L * (long)LOOP_FREQUENCY_HZ);
+  int32_t actualVelCentidegPerSec =
+      (int32_t)lroundf(calSign * encoderDerivativeRad * CENTIDEG_PER_RAD * (float)LOOP_FREQUENCY_HZ);
   Serial.print(F("TELEM "));
   Serial.print(millis());
   Serial.print(' ');
@@ -713,7 +788,7 @@ bool scanPrevSettled = false;      // isSettled as of the last call, to catch th
 bool scanEdgeFound = false;        // this tick's judgeScanStep() result -- set once in loop()'s
                                     // housekeeping, read by STATE_CAL_DOWN_WAIT/STATE_CAL_UP_WAIT's
                                     // own case bodies
-long scanPrevPosition = 0;         // this scan's last ACCEPTED reading -- what the next step's delta is measured against
+float scanPrevPosition = 0.0f;     // this scan's last ACCEPTED reading (radians) -- what the next step's delta is measured against
 
 // Last two ACCEPTED (pulse, position) pairs, most-recent first -- backing
 // off CAL_EDGE_BACKOFF_STEPS/CAL_FINE_EDGE_BACKOFF_STEPS good steps
@@ -721,8 +796,8 @@ long scanPrevPosition = 0;         // this scan's last ACCEPTED reading -- what 
 // history," not just "one step." Both seeded to the scan's own starting
 // point at reset, so backing off 1 or 2 steps from the very first judged
 // step still lands somewhere real (the scan's own start), never garbage.
-int scanBack1Us = 0;   long scanBack1Pos = 0;   // 1 good step back
-int scanBack2Us = 0;   long scanBack2Pos = 0;   // 2 good steps back
+int scanBack1Us = 0;   float scanBack1Pos = 0.0f;   // 1 good step back
+int scanBack2Us = 0;   float scanBack2Pos = 0.0f;   // 2 good steps back
 
 // scanResetPending and skipNextStepCheck are both declared earlier,
 // alongside calibrationRunning/trajectoryRunning, so changeState() can
@@ -743,7 +818,7 @@ int scanBack2Us = 0;   long scanBack2Pos = 0;   // 2 good steps back
 // (CENTER_US for coarse, a fine pass's own margin-move target) settles.
 // startUs/startPos are that settle's own committed pulse and measured
 // position.
-void resetScanState(int startUs, long startPos) {
+void resetScanState(int startUs, float startPos) {
   scanRefDeltaSum = 0.0f;
   scanRefDeltaCount = 0;
   scanReferenceRate = -1.0f;
@@ -776,7 +851,7 @@ void resetScanState(int startUs, long startPos) {
 // scan-reset settle (scanResetPending), a recovery-candidate settle
 // (skipNextStepCheck), and this scan's own first real step
 // (scanFirstStepPending) -- see each flag's own comment.
-bool judgeScanStep(long currentPos) {
+bool judgeScanStep(float currentPos) {
   bool justSettled = isSettled && !scanPrevSettled;
   scanPrevSettled = isSettled;
   if (!justSettled) {
@@ -793,8 +868,8 @@ bool judgeScanStep(long currentPos) {
     return false;
   }
 
-  long signedDelta = currentPos - scanPrevPosition;
-  long delta = (signedDelta < 0) ? -signedDelta : signedDelta;
+  float signedDelta = currentPos - scanPrevPosition;
+  float delta = (signedDelta < 0.0f) ? -signedDelta : signedDelta;
 
   if (scanFirstStepPending) {
     scanFirstStepPending = false;
@@ -807,20 +882,20 @@ bool judgeScanStep(long currentPos) {
   bool edgeFound = false;
   if (scanReferenceRate < 0.0f) {
     // Still building this scan's own baseline -- no judgment possible yet.
-    scanRefDeltaSum += (float)delta;
+    scanRefDeltaSum += delta;
     scanRefDeltaCount++;
     if (scanRefDeltaCount >= CAL_REFERENCE_STEPS) {
       scanReferenceRate = scanRefDeltaSum / (float)scanRefDeltaCount;
     }
   } else {
-    bool actualNegative = (signedDelta < 0);
+    bool actualNegative = (signedDelta < 0.0f);
     bool expectedNegative = (stepDirection < 0);
-    bool weak = ((float)delta < CAL_WEAKENING_FRACTION * scanReferenceRate);
+    bool weak = (delta < CAL_WEAKENING_FRACTION * scanReferenceRate);
     // guarded by !weak so ordinary jitter while genuinely stopped never
     // gets misread as a reversal -- matches scan_until_weak()'s own
     // weakening_fraction noise floor for this check.
     bool reversed = (!weak) && (actualNegative != expectedNegative);
-    bool bigJump = (!weak) && (!reversed) && ((float)delta > CAL_BIG_JUMP_MULTIPLE * scanReferenceRate);
+    bool bigJump = (!weak) && (!reversed) && (delta > CAL_BIG_JUMP_MULTIPLE * scanReferenceRate);
     edgeFound = weak || reversed || bigJump;
   }
 
@@ -938,14 +1013,13 @@ int tablePulseUs(int index) {
   return minUs + (int)((long)(maxUs - minUs) * index / (CAL_TABLE_POINTS - 1));
 }
 
-// filteredPosition (continuous, unwrapped counts -- see
-// updatePositionTracking()) -> centidegrees, via plain integer math (exact
-// ratio 36000/4096 -- no float needed). Used by recordTableEntry() (one
+// filteredPositionRad (continuous, unwrapped radians -- see
+// updatePositionTracking()) -> centidegrees. Used by recordTableEntry() (one
 // reading per settle, during calibration) and currentAngleDeg() further
 // down (a GO move's planned starting point) -- both want the smoothed
 // value. printTelemetry() does NOT use this (see rawAngleCentideg()
 // right below) -- per explicit direction, TELEM reports the raw,
-// unfiltered position, decoupled from whatever filteredPosition is
+// unfiltered position, decoupled from whatever filteredPositionRad is
 // tuned to for those other, still-filtered uses.
 // Defined here, ahead of recordTableEntry()'s own use of it, but Arduino
 // auto-generates a forward declaration for every function in the file
@@ -954,17 +1028,17 @@ int tablePulseUs(int index) {
 // this treatment, only function signatures do), so call-before-definition
 // order elsewhere in this file is never actually a problem.
 int32_t currentAngleCentideg() {
-  return (int32_t)(filteredPosition * 36000L / 4096L);
+  return (int32_t)lroundf(filteredPositionRad * CENTIDEG_PER_RAD);
 }
 
-// Same conversion as currentAngleCentideg(), but from totalCounts (the
+// Same conversion as currentAngleCentideg(), but from totalRad (the
 // raw, unfiltered running position updatePositionTracking() maintains
-// every tick) instead of filteredPosition -- what printTelemetry()
+// every tick) instead of filteredPositionRad -- what printTelemetry()
 // reports as the actual position, per explicit direction that TELEM
 // should show the real, unsmoothed signal rather than whatever
-// filteredPosition happens to be averaged over for its other uses.
+// filteredPositionRad happens to be averaged over for its other uses.
 int32_t rawAngleCentideg() {
-  return (int32_t)(totalCounts * 36000L / 4096L);
+  return (int32_t)lroundf(totalRad * CENTIDEG_PER_RAD);
 }
 
 // Raw encoder-frame centidegrees -> the normalized [0, maxAngleDeg]
@@ -1071,8 +1145,7 @@ uint16_t pulseForAngleCentideg(int32_t angleCentideg) {
 // instead of centidegrees, since that's what plan()/targetPositionDeg/
 // velLimitDegPerSec/accelLimitDegPerSec2 all use.
 float currentAngleDeg() {
-  int32_t rawCentideg = (int32_t)(filteredPosition * 36000L / 4096L);
-  return (float)toNormalizedCentideg(rawCentideg) / 100.0f;
+  return (float)toNormalizedCentideg(currentAngleCentideg()) / 100.0f;
 }
 
 // Discards whatever's in the running-average window -- called whenever a
@@ -1081,7 +1154,6 @@ float currentAngleDeg() {
 void resetSettleWindow() {
   settleBufferCount = 0;
   settleBufferIndex = 0;
-  settleBufferSum = 0;
 }
 
 // Called every tick, before the switch. A move just commanded (inMotion)
@@ -1091,7 +1163,7 @@ void resetSettleWindow() {
 // CAL_SETTLE_WINDOW_COUNTS of the window's running average -- same idea as
 // the Python host's reference-rate self-calibration, just windowed instead
 // of a fixed early-steps baseline.
-void updateSettled(long currentRaw) {
+void updateSettled(float currentRaw) {
   if (inMotion) {
     isSettled = false;
     inMotion = false;
@@ -1100,12 +1172,9 @@ void updateSettled(long currentRaw) {
   }
 
   if (settleBufferCount < CAL_SETTLE_WINDOW_SAMPLES) {
-    settleBufferSum += currentRaw;
     settleBuffer[settleBufferCount] = currentRaw;
     settleBufferCount++;
   } else {
-    settleBufferSum -= settleBuffer[settleBufferIndex];
-    settleBufferSum += currentRaw;
     settleBuffer[settleBufferIndex] = currentRaw;
     settleBufferIndex = (settleBufferIndex + 1) % CAL_SETTLE_WINDOW_SAMPLES;
   }
@@ -1114,10 +1183,11 @@ void updateSettled(long currentRaw) {
     return;   // window not full yet -- not enough history to judge, leave isSettled as-is
   }
 
-  long average = settleBufferSum / CAL_SETTLE_WINDOW_SAMPLES;
-  long diff = currentRaw - average;
-  if (diff < 0) diff = -diff;
-  isSettled = (diff <= CAL_SETTLE_WINDOW_COUNTS);
+  float sum = 0.0f;
+  for (int i = 0; i < CAL_SETTLE_WINDOW_SAMPLES; i++) sum += settleBuffer[i];
+  float diff = currentRaw - (sum / (float)CAL_SETTLE_WINDOW_SAMPLES);
+  if (diff < 0.0f) diff = -diff;
+  isSettled = (diff <= CAL_SETTLE_WINDOW_RAD);
 }
 
 // parseCommand() only ever sees the first token now (see tokenizeLine()
@@ -1227,6 +1297,19 @@ void handleLine(char* line) {
       break;
     }
     case CMD_MODEL:
+      // Gated the same as GO/POS/GETTABLE. Selecting the table model
+      // before a table exists was previously accepted (useTable is only
+      // *read* during a move, so nothing broke), but it let the device
+      // report a live model it could not actually honour -- and this
+      // file's own GETTABLE notes already claimed MODEL rejected here,
+      // which was never true until now. website/app.html is unaffected:
+      // its model tabs live in #card-controls, which carries
+      // `pointer-events: none` until applyCalibration() runs, so it
+      // cannot send MODEL this early anyway.
+      if (!isCalibrated) {
+        Serial.println(F("ERR NOT_CALIBRATED"));
+        break;
+      }
       if (n != 2) { Serial.println(F("ERR USAGE")); break; }
       if (strcmp(tok[1], "LINEAR") == 0) {
         useTable = false;
@@ -1313,16 +1396,38 @@ void setup() {
 
   Wire.begin();
   Wire.setClock(400000);  // Fast-mode I2C -- keeps one read comfortably inside a tick
-  encoder.begin();
-  if (!encoder.isConnected()) {
-    Serial.println(F("# FATAL: AS5600 not detected. Halting."));
+
+  // UEI's begin() both brings the chip up and probes it -- a false return
+  // is the ERR_NOT_CONNECTED case the old isConnected() check covered
+  // separately.
+  if (!encoder.begin()) {
+    Serial.print(F("# FATAL: "));
+    Serial.print(encoder.getErrorString(encoder.getError()));
+    Serial.println(F(". Halting."));
     while (true) {}
   }
 
+  // Magnet diagnostics this firmware previously had no access to at all:
+  // the chip acking on I2C says nothing about whether a magnet is actually
+  // present and in AGC range, which is the difference between good readings
+  // and plausible-looking garbage. Reported rather than fatal -- a magnet
+  // marginal at boot may well be fine once the shaft moves, and CAL's own
+  // edge detection is the real arbiter.
+  if (!encoder.isValid()) {
+    Serial.print(F("# WARNING: "));
+    Serial.println(encoder.getStatusString(encoder.getStatus()));
+  }
+
   servo.attach(SERVO_PIN, ABS_FLOOR_US, ABS_CEIL_US);
-  prevRaw = encoder.readAngle();          // seed updatePositionTracking()'s wrap detector --
-                                           // boot position becomes 0 total counts
-  prevTotalCounts = totalCounts;          // = 0 too, seeding encoderDerivative's own baseline
+
+  // Zero the encoder's software offset at the boot position, so
+  // readAngleRad() -- and therefore totalRad -- starts at exactly 0.0,
+  // matching the reference this firmware has always reported before a
+  // calibration establishes its own frame. UEI seeds its continuous-unwrap
+  // state on the first read, which zero() performs.
+  encoder.zero();
+  totalRad = encoder.readAngleRad();
+  prevTotalRad = totalRad;                // seeds encoderDerivativeRad's own baseline
 
   Serial.println(F("# READY"));
 }
@@ -1345,11 +1450,11 @@ void loop() {
 
   checkSerial();   // before the switch -- a command this tick can reject or redirect state first
 
-  long currentTotal = updatePositionTracking();   // the only encoder read -- see its own comment
-  encoderDerivative = currentTotal - prevTotalCounts;
-  prevTotalCounts = currentTotal;
+  float currentTotal = updatePositionTracking();   // the only encoder read -- see its own comment
+  encoderDerivativeRad = currentTotal - prevTotalRad;
+  prevTotalRad = currentTotal;
 
-  updateFilteredPosition(currentTotal);   // every tick -- keeps filteredPosition current for printMessage()
+  updateFilteredPosition(currentTotal);   // every tick -- keeps filteredPositionRad current
   updateSettled(currentTotal);   // every tick -- reacts to any move writeServoUs() just commanded
 
   printTelemetry();   // every tick, unconditionally, regardless of state -- see its own comment
@@ -1374,7 +1479,7 @@ void loop() {
       currentState == STATE_CAL_RECOVER_WAIT ||
       currentState == STATE_CAL_UP_CENTER ||
       currentState == STATE_CAL_UP_WRITE || currentState == STATE_CAL_UP_WAIT) {
-    scanEdgeFound = judgeScanStep(filteredPosition);
+    scanEdgeFound = judgeScanStep(filteredPositionRad);
   }
 
   if (abortRequested) {   // exit route 3, shared by every state: abort forces STATE_IDLE
@@ -1433,7 +1538,7 @@ void loop() {
         // judgeScanStep()/scanResetPending (CENTER's own settle
         // deliberately never reaches that shared path -- see loop()'s
         // own comment) -- and stepDirection set.
-        resetScanState(CENTER_US, filteredPosition);
+        resetScanState(CENTER_US, filteredPositionRad);
         stepDirection = -1;
         beginCoarsePass();
         changeState(STATE_CAL_DOWN_WRITE);

@@ -9,7 +9,7 @@ draft: false
 
 Every hobby servo ships with the same assumption baked into every tutorial: pick a minimum pulse, a maximum pulse, draw a straight line between them. [It's quietly wrong](/articles/hobby-servo-calibration/) — the real pulse-to-angle curve bows away from that line, sometimes by several degrees. Servo Calibrator is the tool that measures your own servo's real curve instead of assuming one.
 
-Wire up an Arduino Nano, an AS5600 magnetic encoder, and the servo you want to characterize; open one self-contained HTML page in the browser; click **Calibrate**. The firmware stall-scans both directions to find the servo's true mechanical limits, sweeps the full range twice, and builds a direction-averaged 20-point lookup table — no protractor, no hand measurement, usually done in under a minute. Once calibrated, the same page drives and plots a live trajectory against that table, with a toggle to compare it against the naive 2-point line in real time.
+Wire up any Arduino with I²C and a PWM-capable pin, an AS5600 magnetic encoder, and the servo you want to characterize; open one self-contained HTML page in the browser; click **Calibrate**. The firmware stall-scans both directions to find the servo's true mechanical limits, sweeps the full range twice, and builds a direction-averaged 20-point lookup table — no protractor, no hand measurement, usually done in under a minute. Once calibrated, the same page drives and plots a live trajectory against that table, with a toggle to compare it against the naive 2-point line in real time.
 
 This tool is purely for characterization — it doesn't ask about horn position, direction, or a logical zero point, and it always reports the servo's own physical range, `[0, maxAngle]`. Turning that into an actual motor-driver constructor for your project is a separate, application-specific step.
 
@@ -25,17 +25,19 @@ The one thing worth getting right is power. **Run the servo off its own external
 
 ## Getting the firmware to compile
 
-The sketch depends on one sibling library beyond the standard Arduino ones, so a fresh Arduino IDE install needs one extra step before `ServoCalibrator_Companion.ino` will build:
+The sketch needs four libraries that don't ship with the Arduino IDE — one third-party, three of mine — so a fresh install needs a few extra steps before `ServoCalibrator_Companion.ino` will build:
 
-1. **Install AS5600** (RobTillaart's) — it's in the Library Manager's index, so `Sketch → Include Library → Manage Libraries…`, search `AS5600`, install the one by RobTillaart. Or from the command line: `arduino-cli lib install "AS5600"`.
-2. **Add Universal-Trajectory-Interface as a library** — this is the step that trips people up, since it isn't in Library Manager's index. Either:
+1. **Install AS5600** (RobTillaart's) — it's in the Library Manager's index, so `Sketch → Include Library → Manage Libraries…`, search `AS5600`, install the one by RobTillaart. Or from the command line: `arduino-cli lib install "AS5600"`. The firmware talks to it through Universal-Encoder-Interface rather than directly, but that's a wrapper around this library, not a replacement for it.
+2. **Add Universal-Encoder-Interface as a library** — same two options as the next step. It provides `AS5600EncoderDriver`, which handles reading the encoder across full revolutions without the angle wrapping back to zero every turn.
+3. **Add Universal-Trajectory-Interface as a library** — this is the step that trips people up, since it isn't in Library Manager's index. Either:
    - Download the [Universal-Trajectory-Interface repo](https://github.com/vishwam-aggarwal/Universal-Trajectory-Interface) as a ZIP (`Code → Download ZIP`) and use `Sketch → Include Library → Add .ZIP Library…`, pointing at that ZIP — the IDE unpacks it into your sketchbook's `libraries/` folder itself; or
    - `git clone` it straight into your sketchbook's `libraries/` folder, e.g. `~/Documents/Arduino/libraries/Universal-Trajectory-Interface` — no rename needed, it already ships a proper `library.properties`.
+4. **Add Universal-Device-Interface as a library too** — same two options, same place. The sketch never includes anything from it directly; it's the shared base the two libraries above are both built on, and the IDE compiles every source file in a library whether your sketch uses it or not. Skip this and the build stops at `fatal error: IDevice.h: No such file or directory`, which is confusing precisely because nothing you wrote asked for that file.
 
-   Restart the IDE afterward if it was already open, so it picks up the new library.
-3. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino` from the [GitHub repo](https://github.com/vishwam-aggarwal/Servo-Calibrator) in the Arduino IDE and upload it to your board, same as any other sketch. Servo signal is fixed at pin `A3` in the sketch (edit `SERVO_PIN` if you need a different one).
+   Restart the IDE afterward if it was already open, so it picks up the new libraries.
+5. **Flash the firmware.** Open `ServoCalibrator_Companion/ServoCalibrator_Companion.ino` from the [GitHub repo](https://github.com/vishwam-aggarwal/Servo-Calibrator) in the Arduino IDE and upload it to your board, same as any other sketch. Servo signal is fixed at pin `A3` in the sketch (edit `SERVO_PIN` if you need a different one).
 
-Both libraries are free and public — no private access or account needed for either.
+All four libraries are free and public — no private access or account needed for any of them.
 
 ## Using the tool
 
